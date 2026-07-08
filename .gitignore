@@ -1,0 +1,9 @@
+# 忽略所有的 node_modules 目录
+node_modules/
+client/node_modules/
+signaling-server/node_modules/
+
+# 顺便忽略其他常见的环境/日志文件
+.env
+npm-debug.log
+.DS_Store
