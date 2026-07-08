@@ -1,0 +1,14 @@
+{
+  "name": "sudoku-client",
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "vite"
+  },
+  "dependencies": {
+    "socket.io": "^4.8.3",
+    "socket.io-client": "^4.7.0"
+  },
+  "devDependencies": {
+    "vite": "^5.0.0"
+  }
+}
