@@ -36,7 +36,7 @@ cd sudoku-web
 ```
 
 # 2. 环境要求
-- Node.js (推荐 v18.0.0 或更高版本)
+- Node.js (推荐 v18.0.0 或更高版本) windows 中官网下载 [Node.js 官方下载地址](https://nodejs.org/zh-cn/) 运行安装包，一路点“Next（下一步）”即可。 后续终端命令一定要再装好后启动，或者装好后重启终端。
 - npm (Node 自带)
 
 # 3. 安装与运行
@@ -47,10 +47,21 @@ cd sudoku-web
 
 ```bash
 # 进入服务端目录
+
 cd signaling-server
+
 # 安装依赖
+
 npm install
+
+# 验证安装版本
+
+node -v
+npm -v
+
+# 输出了版本号（比如 v20.x.x 和 10.x.x），说明环境已经彻底配好了！
 # 启动服务 (默认运行在 http://localhost:3000)
+
 node server.js
 ```
 
@@ -58,10 +69,15 @@ node server.js
 
 ```bash
 # 另开一个终端，进入前端目录
+
 cd client
+
 # 安装依赖
+
 npm install
+
 # 启动 Vite 本地开发服务器
+
 npm run dev
 ```
 
