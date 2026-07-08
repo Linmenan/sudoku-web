@@ -213,7 +213,8 @@ btnCreate.addEventListener('click', () => {
   // 房主将自己加入玩家列表并标记 isHost
   store.dispatch({ type: 'ADD_PLAYER', payload: { id: 'local', name: nickname, isHost: true } });
   
-  networkManager = new HostPeerManager(roomId, socket, store);
+  // 传入 nickname 给 HostPeerManager
+  networkManager = new HostPeerManager(roomId, socket, store, nickname);
   
   setupPanel.style.display = 'none';
   roomIdInput.disabled = true;
@@ -230,23 +231,28 @@ btnJoin.addEventListener('click', () => {
   const nickname = nicknameInput.value || '玩家';
   const socket = io('http://localhost:3000');
   
-  // 【新增】：首先校验房间是否存在
-  socket.emit('check-room', roomId, (response) => {
+  // 校验房间是否存在以及昵称是否重复
+  socket.emit('check-room', { roomId, nickname }, (response) => {
     if (!response.exists) {
       alert('❌ 房间不存在或房主已离开，请检查房间号！');
-      socket.disconnect(); // 校验失败直接断开
+      socket.disconnect();
+      return;
+    }
+    
+    if (response.duplicate) {
+      alert('❌ 该昵称已被房间内的玩家使用，请换一个昵称！');
+      socket.disconnect();
       return;
     }
 
     // 校验成功，正常加入
     store = createStore(false, (s) => renderBoard(s)); 
-    networkManager = new GuestPeerManager(roomId, socket, store, nickname); // 传入昵称
+    networkManager = new GuestPeerManager(roomId, socket, store, nickname); 
     
-    socket.on('connect', () => {
-      localPlayerId = socket.id; 
-      // 客机先用普通身份占位，之后会被房主全量广播的状态覆盖（名字会换成房主记录的）
-      store.dispatch({ type: 'ADD_PLAYER', payload: { id: localPlayerId, name: nickname, isHost: false } });
-    });
+    // 修复：由于 check-room 回调已触发，Socket 此时必定已是 connected 状态
+    // 直接获取 socket.id 即可，无需也无法再等待 connect 事件
+    localPlayerId = socket.id; 
+    store.dispatch({ type: 'ADD_PLAYER', payload: { id: localPlayerId, name: nickname, isHost: false } });
 
     setupPanel.style.display = 'none';
     roomIdInput.disabled = true;
@@ -256,32 +262,6 @@ btnJoin.addEventListener('click', () => {
     btnCreate.style.display = 'none';
     btnLeave.style.display = 'inline-block'; // 显示退出按钮
   });
-});
-
-btnJoin.addEventListener('click', () => {
-  const roomId = roomIdInput.value || 'test-room';
-  const socket = io('http://localhost:3000');
-  
-  store = createStore(false, (s) => renderBoard(s)); 
-  networkManager = new GuestPeerManager(roomId, socket, store);
-  
-  // ==========================================
-  // 【核心修复】：等待底层 Socket 握手成功后，再获取 ID
-  // ==========================================
-  socket.on('connect', () => {
-    localPlayerId = socket.id; 
-    // 玩家加入后更新自己的 ID
-    store.dispatch({ type: 'ADD_PLAYER', payload: { id: localPlayerId } });
-  });
-
-  setupPanel.style.display = 'none';
-  roomIdInput.disabled = true;
-  roomIdInput.style.border = 'none';
-  roomIdInput.style.background = 'transparent';
-  roomIdInput.style.fontWeight = 'bold';
-
-  btnJoin.disabled = true;
-  btnCreate.disabled = true;
 });
 
 btnLeave.addEventListener('click', () => {

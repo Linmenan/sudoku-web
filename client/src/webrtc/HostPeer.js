@@ -7,10 +7,11 @@
  * @Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
  */
 export class HostPeerManager {
-  constructor(roomId, socket, store, iceConfig = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] }) {
+  constructor(roomId, socket, store, nickname, iceConfig = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] }) {
     this.roomId = roomId;
     this.socket = socket;
     this.store = store;
+    this.nickname = nickname;
     this.iceConfig = iceConfig;
     this.peers = {}; // { guestSocketId: { pc, channel } }
 
@@ -18,10 +19,10 @@ export class HostPeerManager {
   }
 
   initSignaling() {
-    this.socket.emit('create-room', this.roomId);
+    this.socket.emit('create-room', { roomId: this.roomId, nickname: this.nickname });
 
     // 1. 监听新玩家加入
-    this.socket.on('player-joined', async (guestId) => {
+    this.socket.on('player-joined', async ({ id: guestId, nickname }) => {
       // ---> 新增：更新全局状态，添加玩家
       // 记录玩家时将传来的昵称加入状态
       this.store.dispatch({ type: 'ADD_PLAYER', payload: { id: guestId, name: nickname, isHost: false } });

@@ -89,14 +89,18 @@ export const createStore = (isHost = false, onStateChange = () => {}) => {
           break;
         }
         case 'ADD_PLAYER': {
-          const { id } = action.payload;
-          const colorCount = Object.keys(state.players).length;
-          // 新增：房主名字前自动加星星
+          const { id, name, isHost } = action.payload;
           const displayName = isHost ? `⭐ ${name}` : name;
-          state.players[id] = { 
-            name: displayName, 
-            color: PLAYER_COLORS[colorCount % PLAYER_COLORS.length] 
-          };
+          // 修复：如果玩家已存在，只更新名字（例如加星星），不重新计算并覆盖颜色
+          if (!state.players[id]) {
+            const colorCount = Object.keys(state.players).length;
+            state.players[id] = { 
+              name: displayName, 
+              color: PLAYER_COLORS[colorCount % PLAYER_COLORS.length] 
+            };
+          } else {
+            state.players[id].name = displayName;
+          }
           break;
         }
         case 'REMOVE_PLAYER': {
