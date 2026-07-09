@@ -47,15 +47,8 @@ export const createStore = (isHost = false, onStateChange = () => {}) => {
             state.cellOwners[index] = value !== null ? fromPlayerId : null;
           }
 
-          if (value !== null && state.phase === 'PLAYING') {
-            const target = getRowColGrid(index);
-            for (let i = 0; i < 81; i++) {
-              const current = getRowColGrid(i);
-              if (current.row === target.row || current.col === target.col || current.grid === target.grid) {
-                state.notes[i] = state.notes[i].filter(n => n !== value);
-              }
-            }
-          }
+          // 移除填入数字时对关联单元格 notes 数组的物理删除。
+          // 改在前端 renderBoard 时动态计算冲突来临时隐藏，从而实现当数字被删除时，原笔记会自动恢复。
           break;
         }
         case 'TOGGLE_NOTE': {

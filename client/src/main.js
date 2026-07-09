@@ -1,8 +1,11 @@
+/*
+ * @FilePath: /client/src/main.js
+ */
 import { io } from 'socket.io-client';
 import { createStore } from './store/gameState.js';
 import { HostPeerManager } from './webrtc/HostPeer.js';
 import { GuestPeerManager } from './webrtc/GuestPeer.js';
-import { countSolutions, isBoardSolved } from './sudoku/solver.js'; // 补充引入 isBoardSolved
+import { countSolutions, isBoardSolved } from './sudoku/solver.js';
 
 const boardDiv = document.getElementById('board');
 const roomIdInput = document.getElementById('roomIdInput');
@@ -18,23 +21,51 @@ const nicknameInput = document.getElementById('nicknameInput');
 const btnLeave = document.getElementById('btnLeave');
 const winModal = document.getElementById('winModal');
 const scoreBoard = document.getElementById('scoreBoard');
+const serverUrlInput = document.getElementById('serverUrlInput');
+
+// 智能检测局域网 IP
+if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+  if (window.location.hostname.match(/^\d+\.\d+\.\d+\.\d+$/)) {
+    if (serverUrlInput) serverUrlInput.value = `http://${window.location.hostname}:3000`;
+  }
+}
+
+const virtualKeyboard = document.getElementById('virtualKeyboard');
+const vkModeToggle = document.getElementById('vkModeToggle');
 
 let networkManager = null;
 let store = createStore(true, (s) => renderBoard(s)); 
 let localPlayerId = 'local';
-let isNoteMode = false; // 新增备注模式开关
+let isNoteMode = false;
 
-// 备注模式切换
+function updateModeToggleUI() {
+  const modeText = isNoteMode ? '📝 备注模式 (On)' : '📝 备注模式 (Off)';
+  const vkModeText = isNoteMode ? '📝 备注 (On)' : '📝 备注 (Off)';
+
+  modeToggle.innerText = modeText;
+  if (isNoteMode) modeToggle.classList.add('active');
+  else modeToggle.classList.remove('active');
+
+  if (vkModeToggle) {
+    vkModeToggle.innerText = vkModeText;
+    if (isNoteMode) vkModeToggle.classList.add('active');
+    else vkModeToggle.classList.remove('active');
+  }
+}
+
 modeToggle.addEventListener('click', () => {
   isNoteMode = !isNoteMode;
-  if (isNoteMode) {
-    modeToggle.classList.add('active');
-    modeToggle.innerText = '📝 备注模式 (On)';
-  } else {
-    modeToggle.classList.remove('active');
-    modeToggle.innerText = '📝 备注模式 (Off)';
-  }
+  updateModeToggleUI();
 });
+
+if (vkModeToggle) {
+  vkModeToggle.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation(); 
+    isNoteMode = !isNoteMode;
+    updateModeToggleUI();
+  });
+}
 
 for (let i = 0; i < 81; i++) {
   const cell = document.createElement('div');
@@ -43,7 +74,10 @@ for (let i = 0; i < 81; i++) {
   if (i % 9 === 2 || i % 9 === 5) cell.classList.add('border-right-thick');
   if (Math.floor(i / 9) === 2 || Math.floor(i / 9) === 5) cell.classList.add('border-bottom-thick');
 
-  cell.addEventListener('click', () => executeAction({ type: 'UPDATE_FOCUS', payload: { index: i } }));
+  cell.addEventListener('click', (e) => {
+    e.stopPropagation(); // 核心修复：阻止冒泡，防止触发 document 的全局失焦事件
+    executeAction({ type: 'UPDATE_FOCUS', payload: { index: i } });
+  });
   boardDiv.appendChild(cell);
 }
 
@@ -58,16 +92,15 @@ function executeAction(action) {
   }
 }
 
-// 键盘事件 (解耦验证)
-document.addEventListener('keydown', (e) => {
-  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+function handleInput(key) {
   const state = store.getState();
   const focusedIndex = state.focuses[localPlayerId];
   if (focusedIndex === undefined || focusedIndex === null) return;
 
-  const num = parseInt(e.key);
+  const num = parseInt(key);
   const isValidNum = num >= 1 && num <= 9;
-  const isDelete = e.key === 'Backspace' || e.key === 'Delete';
+  const isDelete = key === 'Backspace' || key === 'Delete' || key === 'Del';
+  
   if (!isValidNum && !isDelete) return;
 
   if (isNoteMode && isValidNum) {
@@ -82,7 +115,6 @@ document.addEventListener('keydown', (e) => {
       btnCreate.disabled = true;
     }
 
-    // 【新增】：如果在游玩阶段，每次填入后检查是否完成
     if (store.getState().phase === 'PLAYING') {
       const currentBoard = store.getState().board;
       if (isBoardSolved(currentBoard)) {
@@ -90,24 +122,54 @@ document.addEventListener('keydown', (e) => {
       }
     }
   }
+}
+
+document.addEventListener('keydown', (e) => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+  const state = store.getState();
+  const focusedIndex = state.focuses[localPlayerId];
+
+  if (focusedIndex !== undefined && focusedIndex !== null) {
+    let row = Math.floor(focusedIndex / 9);
+    let col = focusedIndex % 9;
+    let moved = false;
+
+    if (e.key === 'ArrowUp') { row = (row - 1 + 9) % 9; moved = true; }
+    else if (e.key === 'ArrowDown') { row = (row + 1) % 9; moved = true; }
+    else if (e.key === 'ArrowLeft') { col = (col - 1 + 9) % 9; moved = true; }
+    else if (e.key === 'ArrowRight') { col = (col + 1) % 9; moved = true; }
+
+    if (moved) {
+      e.preventDefault();
+      const newIndex = row * 9 + col;
+      executeAction({ type: 'UPDATE_FOCUS', payload: { index: newIndex } });
+      return;
+    }
+  }
+  handleInput(e.key);
+});
+
+document.querySelectorAll('.vk-key:not(#vkModeToggle)').forEach(btn => {
+  btn.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation(); 
+    handleInput(btn.dataset.key);
+  });
 });
 
 function triggerWinSequence(state) {
-  // 计算每个玩家最后拥有的格子数量
   const scores = {};
   Object.keys(state.players).forEach(id => scores[id] = 0);
 
   state.cellOwners.forEach((ownerId, index) => {
-    // 只统计非锁定的格子 (锁定的格子是题目本身)
     if (!state.locked[index] && ownerId && state.players[ownerId]) {
       scores[ownerId]++;
     }
   });
 
-  // 渲染排行榜
   scoreBoard.innerHTML = '';
   Object.keys(scores)
-    .sort((a, b) => scores[b] - scores[a]) // 按贡献降序
+    .sort((a, b) => scores[b] - scores[a])
     .forEach(id => {
       const p = state.players[id];
       scoreBoard.innerHTML += `
@@ -117,13 +179,14 @@ function triggerWinSequence(state) {
         </div>`;
     });
 
-  winModal.style.display = 'flex'; // 弹出面板
+  winModal.style.display = 'flex';
 }
 
-// 核心修复：点击盘面以外的区域，解除聚焦
 document.addEventListener('click', (e) => {
-  // 如果点击的目标元素不是单元格（.cell 及其子元素）
-  if (!e.target.closest('.cell')) {
+  // 双保险：如果点击的目标元素在冒泡期间被重新渲染清除了（成为孤儿节点），则直接忽略
+  if (!document.contains(e.target)) return;
+
+  if (!e.target.closest('.cell') && !e.target.closest('#virtualKeyboard') && !e.target.closest('.mode-toggle')) {
     executeAction({ type: 'UPDATE_FOCUS', payload: { index: null } });
   }
 });
@@ -137,8 +200,14 @@ btnClear.addEventListener('click', () => {
   }
 });
 
+const getRowColGrid = (index) => {
+  const row = Math.floor(index / 9);
+  const col = index % 9;
+  const grid = Math.floor(row / 3) * 3 + Math.floor(col / 3);
+  return { row, col, grid };
+};
+
 function renderBoard(state) {
-  // 1. 渲染玩家列表
   playerListDiv.innerHTML = '';
   Object.values(state.players).forEach(player => {
     const tag = document.createElement('div');
@@ -148,7 +217,20 @@ function renderBoard(state) {
     playerListDiv.appendChild(tag);
   });
 
-  // 2. 渲染盘面
+  const conflicts = Array(81).fill().map(() => new Set());
+  for (let i = 0; i < 81; i++) {
+    if (state.board[i] !== null) {
+      const val = state.board[i];
+      const target = getRowColGrid(i);
+      for (let j = 0; j < 81; j++) {
+        const current = getRowColGrid(j);
+        if (current.row === target.row || current.col === target.col || current.grid === target.grid) {
+          conflicts[j].add(val);
+        }
+      }
+    }
+  }
+
   const cells = document.querySelectorAll('.cell');
   cells.forEach((cell, index) => {
     let className = 'cell';
@@ -157,27 +239,23 @@ function renderBoard(state) {
     if (state.locked[index]) className += ' locked';
     cell.className = className;
     
-    // 【彩色内边框聚焦效果】
     let boxShadows = [];
     Object.entries(state.focuses).forEach(([playerId, focusedIndex]) => {
       if (focusedIndex === index && state.players[playerId]) {
         const color = state.players[playerId].color;
-        // 使用多重 inset shadow 实现边框嵌套感
         boxShadows.push(`inset 0 0 0 4px ${color}`); 
       }
     });
     cell.style.boxShadow = boxShadows.length > 0 ? boxShadows.join(', ') : 'none';
 
-    // 渲染内容（大数字 or 3x3 备注）
     if (state.board[index] !== null) {
       cell.innerHTML = state.board[index];
     } else {
-      const notes = state.notes[index];
-      if (notes.length > 0) {
-        // 构建 3x3 网格
+      const visibleNotes = state.notes[index].filter(n => !conflicts[index].has(n));
+      if (visibleNotes.length > 0) {
         let gridHtml = '<div class="notes-grid">';
         for (let n = 1; n <= 9; n++) {
-          gridHtml += `<div class="note-item">${notes.includes(n) ? n : ''}</div>`;
+          gridHtml += `<div class="note-item">${visibleNotes.includes(n) ? n : ''}</div>`;
         }
         gridHtml += '</div>';
         cell.innerHTML = gridHtml;
@@ -186,6 +264,35 @@ function renderBoard(state) {
       }
     }
   });
+
+  if (virtualKeyboard) {
+    const hasFocus = state.focuses[localPlayerId] !== null && state.focuses[localPlayerId] !== undefined;
+    virtualKeyboard.style.display = hasFocus ? 'grid' : 'none';
+  }
+}
+
+function createSocketConnection() {
+  const serverUrl = serverUrlInput ? serverUrlInput.value.trim() : 'http://localhost:3000';
+  console.log(`[Socket] 尝试连接信令服务器: ${serverUrl}`);
+  const socket = io(serverUrl, {
+    reconnectionAttempts: 3,
+    timeout: 5000,
+  });
+
+  socket.on('connect', () => {
+    console.log('[Socket] ✅ 成功连接到信令服务器！Socket ID:', socket.id);
+  });
+
+  socket.on('connect_error', (err) => {
+    console.error('[Socket] ❌ 连接信令服务器失败:', err.message);
+    alert('❌ 无法连接到服务器，请检查信令服务器是否已启动，或地址是否正确。详细信息请查看 VConsole。');
+  });
+
+  socket.on('disconnect', (reason) => {
+    console.warn('[Socket] ⚠️ 与信令服务器断开连接，原因:', reason);
+  });
+
+  return socket;
 }
 
 btnVerify.addEventListener('click', () => {
@@ -205,92 +312,70 @@ btnVerify.addEventListener('click', () => {
 });
 
 btnCreate.addEventListener('click', () => {
-  // 1. 防抖保护：立即禁用按钮，防止连续点击
-  btnCreate.disabled = true;
-  btnJoin.disabled = true;
-  btnCreate.textContent = '创建中...';
-
   const roomId = roomIdInput.value || 'test-room';
   const nickname = nicknameInput.value || '房主';
-  // 核心修改：留空 io()，它会自动连接到当前网页的域名，实现环境无感！
-  const socket = io();
   
-  store.dispatch({ type: 'LOCK_PUZZLE' });
-  // 房主将自己加入玩家列表并标记 isHost
+  console.log(`[Host] 正在创建房间... 房间号: ${roomId}, 昵称: ${nickname}`);
+  const socket = createSocketConnection();
+  
+  store.dispatch({ type: 'LOCK_PUZZLE' }); 
   store.dispatch({ type: 'ADD_PLAYER', payload: { id: 'local', name: nickname, isHost: true } });
-  
-  // 传入 nickname 给 HostPeerManager
   networkManager = new HostPeerManager(roomId, socket, store, nickname);
   
   setupPanel.style.display = 'none';
   roomIdInput.disabled = true;
   nicknameInput.disabled = true;
-  
-  btnCreate.style.display = 'none'; // 隐藏创建按钮
+  btnCreate.style.display = 'none';
   btnJoin.style.display = 'none';
-  btnLeave.style.display = 'inline-block'; // 显示退出按钮
-  btnLeave.innerText = '解散房间'; // 房主的退出按钮叫解散
+  btnLeave.style.display = 'inline-block';
+  btnLeave.innerText = '解散房间';
 });
 
 btnJoin.addEventListener('click', () => {
-  // 1. 防抖保护：立即禁用按钮，并保存原始文本
-  btnJoin.disabled = true;
-  btnCreate.disabled = true;
-  const originalText = btnJoin.textContent;
-  btnJoin.textContent = '连接中...';
-
   const roomId = roomIdInput.value || 'test-room';
   const nickname = nicknameInput.value || '玩家';
-  // 核心修改：留空 io()，它会自动连接到当前网页的域名，实现环境无感！
-  const socket = io();
   
-  // 校验房间是否存在以及昵称是否重复
-  socket.emit('check-room', { roomId, nickname }, (response) => {
-    if (!response.exists) {
-      alert('❌ 房间不存在或房主已离开，请检查房间号！');
-      socket.disconnect();
-      // 2. 错误恢复：解开禁用状态，允许玩家重试
-      btnJoin.disabled = false;
-      btnCreate.disabled = false;
-      btnJoin.textContent = originalText;
-      return;
-    }
-    
-    if (response.duplicate) {
-      alert('❌ 该昵称已被房间内的玩家使用，请换一个昵称！');
-      socket.disconnect();
-      // 2. 错误恢复：解开禁用状态，允许玩家修改昵称后重试
-      btnJoin.disabled = false;
-      btnCreate.disabled = false;
-      btnJoin.textContent = originalText;
-      return;
-    }
+  console.log(`[Guest] 尝试加入房间... 房间号: ${roomId}, 昵称: ${nickname}`);
+  const socket = createSocketConnection();
+  
+  socket.on('connect', () => {
+    console.log(`[Guest] 开始校验房间状态...`);
+    socket.emit('check-room', { roomId, nickname }, (response) => {
+      console.log(`[Guest] 收到的房间校验结果:`, response);
+      
+      if (!response.exists) {
+        console.error(`[Guest] ❌ 房间校验失败: 房间不存在！`);
+        alert('❌ 房间不存在或房主已离开，请检查房间号！');
+        socket.disconnect();
+        return;
+      }
+      if (response.duplicate) {
+        console.error(`[Guest] ❌ 房间校验失败: 昵称重复！`);
+        alert('❌ 该昵称已被房间内的玩家使用，请换一个昵称！');
+        socket.disconnect();
+        return;
+      }
 
-    // 校验成功，正常加入 (无需恢复按钮，因为后续逻辑会直接隐藏 Setup 面板)
-    store = createStore(false, (s) => renderBoard(s)); 
-    networkManager = new GuestPeerManager(roomId, socket, store, nickname); 
-    
-    // 修复：由于 check-room 回调已触发，Socket 此时必定已是 connected 状态
-    // 直接获取 socket.id 即可，无需也无法再等待 connect 事件
-    localPlayerId = socket.id; 
-    store.dispatch({ type: 'ADD_PLAYER', payload: { id: localPlayerId, name: nickname, isHost: false } });
+      console.log(`[Guest] ✅ 房间校验通过，正在初始化 P2P 核心模块...`);
+      store = createStore(false, (s) => renderBoard(s)); 
+      networkManager = new GuestPeerManager(roomId, socket, store, nickname); 
+      localPlayerId = socket.id; 
+      store.dispatch({ type: 'ADD_PLAYER', payload: { id: localPlayerId, name: nickname, isHost: false } });
 
-    setupPanel.style.display = 'none';
-    roomIdInput.disabled = true;
-    nicknameInput.disabled = true;
-
-    btnJoin.style.display = 'none';
-    btnCreate.style.display = 'none';
-    btnLeave.style.display = 'inline-block'; // 显示退出按钮
+      setupPanel.style.display = 'none';
+      roomIdInput.disabled = true;
+      nicknameInput.disabled = true;
+      btnJoin.style.display = 'none';
+      btnCreate.style.display = 'none';
+      btnLeave.style.display = 'inline-block';
+    });
   });
 });
 
 btnLeave.addEventListener('click', () => {
   if (confirm('确定要退出当前房间吗？')) {
-    // 最干净、最无残留的退出方式：直接重载页面回到初始状态
     window.location.reload(); 
   }
 });
-
 
 renderBoard(store.getState());
