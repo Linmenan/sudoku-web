@@ -207,9 +207,10 @@ btnVerify.addEventListener('click', () => {
 btnCreate.addEventListener('click', () => {
   const roomId = roomIdInput.value || 'test-room';
   const nickname = nicknameInput.value || '房主';
-  const socket = io('http://localhost:3000');
+  // 核心修改：留空 io()，它会自动连接到当前网页的域名，实现环境无感！
+  const socket = io();
   
-  store.dispatch({ type: 'LOCK_PUZZLE' }); 
+  store.dispatch({ type: 'LOCK_PUZZLE' });
   // 房主将自己加入玩家列表并标记 isHost
   store.dispatch({ type: 'ADD_PLAYER', payload: { id: 'local', name: nickname, isHost: true } });
   
@@ -229,7 +230,8 @@ btnCreate.addEventListener('click', () => {
 btnJoin.addEventListener('click', () => {
   const roomId = roomIdInput.value || 'test-room';
   const nickname = nicknameInput.value || '玩家';
-  const socket = io('http://localhost:3000');
+  // 核心修改：留空 io()，它会自动连接到当前网页的域名，实现环境无感！
+  const socket = io();
   
   // 校验房间是否存在以及昵称是否重复
   socket.emit('check-room', { roomId, nickname }, (response) => {

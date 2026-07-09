@@ -3,6 +3,10 @@ node_modules/
 client/node_modules/
 signaling-server/node_modules/
 
+# 忽略所有的打包产物
+dist/
+client/dist/
+
 # 顺便忽略其他常见的环境/日志文件
 .env
 npm-debug.log

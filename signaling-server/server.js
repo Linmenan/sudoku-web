@@ -1,19 +1,35 @@
-const io = require('socket.io')(3000, { cors: { origin: '*' } });
+/*
+ * @Author: yanyu yanyu1@xcmg.com
+ * @Date: 2026-07-09 09:12:09
+ * @LastEditors: yanyu yanyu1@xcmg.com
+ * @LastEditTime: 2026-07-09 09:46:15
+ * @FilePath: /sudoku-webrtc/signaling-server/server.js
+ * @Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
+ */
+const express = require('express');
+const http = require('http');
+const { Server } = require('socket.io');
+const localtunnel = require('localtunnel');
+const path = require('path');
+
+const app = express();
+const server = http.createServer(app);
+const io = new Server(server, { cors: { origin: '*' } });
+
+// 关键点：让 Node.js 直接提供前端的打包页面
+app.use(express.static(path.join(__dirname, '../client/dist')));
 
 io.on('connection', (socket) => {
   socket.on('create-room', ({ roomId, nickname }) => {
     socket.join(roomId);
-    socket.nickname = nickname; // 将昵称绑定到房主的 socket 实例上
+    socket.nickname = nickname; 
     socket.emit('room-created', socket.id);
   });
 
-  // 1. 新增：提供给加入者验证房间是否存在的接口
   socket.on('check-room', ({ roomId, nickname }, callback) => {
     const room = io.sockets.adapter.rooms.get(roomId);
-    // 如果房间存在且至少有一个人（房主），则返回 true
     if (room && room.size > 0) {
       let isDuplicate = false;
-      // 遍历当前房间内的所有 socket 客户端
       for (const socketId of room) {
         const s = io.sockets.sockets.get(socketId);
         if (s && s.nickname === nickname) {
@@ -27,10 +43,9 @@ io.on('connection', (socket) => {
     }
   });
 
-  // 2. 修改：加入房间时携带昵称，并转发给房主
   socket.on('join-room', ({ roomId, nickname }) => {
     socket.join(roomId);
-    socket.nickname = nickname; // 将昵称绑定到玩家的 socket 实例上
+    socket.nickname = nickname; 
     socket.to(roomId).emit('player-joined', { id: socket.id, nickname });
   });
 
@@ -41,4 +56,26 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => {
     io.emit('player-disconnected', socket.id);
   });
+});
+
+const PORT = 3000;
+server.listen(PORT, async () => {
+  console.log(`💻 本地服务已启动: http://localhost:${PORT}`);
+  
+  try {
+    // 自动化无感穿透的核心代码
+    console.log('⏳ 正在向外太空发射穿透信号，请求公网地址...');
+    const tunnel = await localtunnel({ port: PORT });
+    
+    console.log('\n======================================================');
+    console.log('🚀 互联网联机就绪！请将下方网址发给你的朋友：');
+    console.log(`👉  ${tunnel.url}`);
+    console.log('======================================================\n');
+    
+    tunnel.on('close', () => {
+      console.log('⚠️ 穿透通道已关闭');
+    });
+  } catch (err) {
+    console.error('❌ 穿透失败，请检查网络或稍后重试:', err);
+  }
 });
