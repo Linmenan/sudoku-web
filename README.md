@@ -64,7 +64,7 @@ npm run build
 cd ../signaling-server
 
 # 安装后端依赖 (包含 express 和 localtunnel)
-npm install
+npm install express localtunnel
 
 # 启动服务
 node server.js
