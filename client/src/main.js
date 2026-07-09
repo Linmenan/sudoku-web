@@ -205,6 +205,11 @@ btnVerify.addEventListener('click', () => {
 });
 
 btnCreate.addEventListener('click', () => {
+  // 1. 防抖保护：立即禁用按钮，防止连续点击
+  btnCreate.disabled = true;
+  btnJoin.disabled = true;
+  btnCreate.textContent = '创建中...';
+
   const roomId = roomIdInput.value || 'test-room';
   const nickname = nicknameInput.value || '房主';
   // 核心修改：留空 io()，它会自动连接到当前网页的域名，实现环境无感！
@@ -228,6 +233,12 @@ btnCreate.addEventListener('click', () => {
 });
 
 btnJoin.addEventListener('click', () => {
+  // 1. 防抖保护：立即禁用按钮，并保存原始文本
+  btnJoin.disabled = true;
+  btnCreate.disabled = true;
+  const originalText = btnJoin.textContent;
+  btnJoin.textContent = '连接中...';
+
   const roomId = roomIdInput.value || 'test-room';
   const nickname = nicknameInput.value || '玩家';
   // 核心修改：留空 io()，它会自动连接到当前网页的域名，实现环境无感！
@@ -238,16 +249,24 @@ btnJoin.addEventListener('click', () => {
     if (!response.exists) {
       alert('❌ 房间不存在或房主已离开，请检查房间号！');
       socket.disconnect();
+      // 2. 错误恢复：解开禁用状态，允许玩家重试
+      btnJoin.disabled = false;
+      btnCreate.disabled = false;
+      btnJoin.textContent = originalText;
       return;
     }
     
     if (response.duplicate) {
       alert('❌ 该昵称已被房间内的玩家使用，请换一个昵称！');
       socket.disconnect();
+      // 2. 错误恢复：解开禁用状态，允许玩家修改昵称后重试
+      btnJoin.disabled = false;
+      btnCreate.disabled = false;
+      btnJoin.textContent = originalText;
       return;
     }
 
-    // 校验成功，正常加入
+    // 校验成功，正常加入 (无需恢复按钮，因为后续逻辑会直接隐藏 Setup 面板)
     store = createStore(false, (s) => renderBoard(s)); 
     networkManager = new GuestPeerManager(roomId, socket, store, nickname); 
     

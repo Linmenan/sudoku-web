@@ -2,7 +2,7 @@
  * @Author: yanyu yanyu1@xcmg.com
  * @Date: 2026-07-09 09:12:09
  * @LastEditors: yanyu yanyu1@xcmg.com
- * @LastEditTime: 2026-07-09 09:46:15
+ * @LastEditTime: 2026-07-09 10:38:16
  * @FilePath: /sudoku-webrtc/signaling-server/server.js
  * @Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
  */
@@ -62,20 +62,20 @@ const PORT = 3000;
 server.listen(PORT, async () => {
   console.log(`💻 本地服务已启动: http://localhost:${PORT}`);
   
-  try {
-    // 自动化无感穿透的核心代码
-    console.log('⏳ 正在向外太空发射穿透信号，请求公网地址...');
-    const tunnel = await localtunnel({ port: PORT });
+  // try {
+  //   // 自动化无感穿透的核心代码
+  //   console.log('⏳ 正在向外太空发射穿透信号，请求公网地址...');
+  //   const tunnel = await localtunnel({ port: PORT });
     
-    console.log('\n======================================================');
-    console.log('🚀 互联网联机就绪！请将下方网址发给你的朋友：');
-    console.log(`👉  ${tunnel.url}`);
-    console.log('======================================================\n');
+  //   console.log('\n======================================================');
+  //   console.log('🚀 互联网联机就绪！请将下方网址发给你的朋友：');
+  //   console.log(`👉  ${tunnel.url}`);
+  //   console.log('======================================================\n');
     
-    tunnel.on('close', () => {
-      console.log('⚠️ 穿透通道已关闭');
-    });
-  } catch (err) {
-    console.error('❌ 穿透失败，请检查网络或稍后重试:', err);
-  }
+  //   tunnel.on('close', () => {
+  //     console.log('⚠️ 穿透通道已关闭');
+  //   });
+  // } catch (err) {
+  //   console.error('❌ 穿透失败，请检查网络或稍后重试:', err);
+  // }
 });

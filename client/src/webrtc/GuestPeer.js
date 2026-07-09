@@ -2,12 +2,27 @@
  * @Author: yanyu yanyu1@xcmg.com
  * @Date: 2026-07-08 15:16:44
  * @LastEditors: yanyu yanyu1@xcmg.com
- * @LastEditTime: 2026-07-08 16:58:10
+ * @LastEditTime: 2026-07-09 10:58:08
  * @FilePath: /sudoku-webrtc/client/src/webrtc/GuestPeer.js
  * @Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
  */
 export class GuestPeerManager {
-  constructor(roomId, socket, store, nickname, iceConfig = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] }) {
+  constructor(roomId, socket, store, nickname, iceConfig = { 
+    iceServers: [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' },
+      {
+        urls: 'turn:openrelay.metered.ca:80',
+        username: 'openrelayproject',
+        credential: 'openrelayproject'
+      },
+      {
+        urls: 'turn:openrelay.metered.ca:443',
+        username: 'openrelayproject',
+        credential: 'openrelayproject'
+      }
+    ] 
+  }) {
     this.roomId = roomId;
     this.socket = socket;
     this.store = store;

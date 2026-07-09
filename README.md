@@ -68,14 +68,20 @@ npm install express localtunnel
 
 # 启动服务
 node server.js
+
 ```
 
-启动成功后，终端不仅会显示本地测试地址（http://localhost:3000），还会自动请求并在终端打印出一个公网穿透网址（例如：https://xxxx-xxxx.loca.lt）。
+再启动一个终端，使用 Pinggy 穿透
 
-你只需将这个网址发给朋友，双方通过浏览器打开即可直接跨网联机！
+```bash
+ssh -p 443 -R0:localhost:3000 a.pinggy.io
+
+```
+
+将终端公网穿透网址（例如：https://xxxx-xxxx.loca.lt）发给朋友，双方通过浏览器打开即可直接跨网联机！
 
 
-(💡 提示：如果访问生成的公网链接时，出现 Localtunnel 的防滥用安全提示网页，只需根据页面上的提示，复制网页上显示的公网 IP 并填入输入框，点击继续即可进入游戏。)
+(💡 提示：如果访问生成的公网链接时，出现 Pinggy 的防滥用安全提示网页，只需根据页面上的提示，点击继续即可进入游戏。)
 
 # 🎮 游玩指南
 ## 出题阶段 (Setup Phase)
