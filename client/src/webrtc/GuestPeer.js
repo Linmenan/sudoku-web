@@ -45,6 +45,7 @@ export class GuestPeerManager {
   initSignaling() {
     console.log(`[WebRTC-Guest] 📣 向信令服务器发送 join-room 请求...`);
     this.socket.emit('join-room', { roomId: this.roomId, nickname: this.nickname });
+    this.iceQueue = []; // 新增：ICE 候选者缓冲队列
 
     this.socket.on('signal', async ({ from, data }) => {
       try {
@@ -52,6 +53,13 @@ export class GuestPeerManager {
           console.log(`[WebRTC-Guest] 📥 收到房主发来的 Offer! 准备设置为远程描述...`);
           await this.pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
           console.log(`[WebRTC-Guest] ✅ 远程描述设置成功!`);
+          
+          // 核心修复：处理之前因为等待 SDP 而积压的 ICE 候选者
+          while (this.iceQueue.length > 0) {
+            const candidate = this.iceQueue.shift();
+            console.log(`[WebRTC-Guest] 🧊 处理队列中的 ICE 候选者...`);
+            await this.pc.addIceCandidate(new RTCIceCandidate(candidate));
+          }
           
           this.pc.onicecandidate = (event) => {
             if (event.candidate) {
@@ -68,8 +76,13 @@ export class GuestPeerManager {
           this.socket.emit('signal', { to: from, data: { sdp: this.pc.localDescription } });
 
         } else if (data.candidate) {
-          console.log(`[WebRTC-Guest] 🧊 收到房主发来的 ICE 候选者，正在添加...`);
-          await this.pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+          if (this.pc.remoteDescription) {
+            console.log(`[WebRTC-Guest] 🧊 收到房主发来的 ICE 候选者，正在添加...`);
+            await this.pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+          } else {
+            console.log(`[WebRTC-Guest] ⏳ 远程描述尚未就绪，将 ICE 候选者加入缓冲队列...`);
+            this.iceQueue.push(data.candidate);
+          }
         }
       } catch (err) {
         console.error(`[WebRTC-Guest] ❌ 处理房主信令时发生错误:`, err);

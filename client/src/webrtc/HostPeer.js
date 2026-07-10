@@ -45,6 +45,8 @@ export class HostPeerManager {
         const pc = new RTCPeerConnection(this.iceConfig);
         console.log(`[WebRTC-Host] 🛠️ 已为玩家 ${nickname} 创建 RTCPeerConnection`);
         
+        const iceQueue = []; // 新增：为每个玩家独立创建一个 ICE 缓冲队列
+        
         pc.oniceconnectionstatechange = () => {
           console.log(`[WebRTC-Host] 📡 与玩家 ${nickname} 的底层连接状态改变为: ✨ ${pc.iceConnectionState} ✨`);
           if (pc.iceConnectionState === 'failed') {
@@ -56,7 +58,7 @@ export class HostPeerManager {
         console.log(`[WebRTC-Host] 🛤️ 已创建 DataChannel 通道: game-data`);
         this.setupChannel(guestId, channel, nickname);
 
-        this.peers[guestId] = { pc, channel };
+        this.peers[guestId] = { pc, channel, iceQueue };
 
         pc.onicecandidate = (event) => {
           if (event.candidate) {
@@ -88,9 +90,21 @@ export class HostPeerManager {
           console.log(`[WebRTC-Host] 📥 收到玩家发来的 Answer，正在设置为远程描述...`);
           await peer.pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
           console.log(`[WebRTC-Host] ✅ 成功设置远程描述 (Answer)！握手逻辑完成，等待通道建立...`);
+          
+          // 核心修复：处理队列中积压的 ICE 候选者
+          while (peer.iceQueue.length > 0) {
+            const candidate = peer.iceQueue.shift();
+            console.log(`[WebRTC-Host] 🧊 处理队列中的 ICE 候选者...`);
+            await peer.pc.addIceCandidate(new RTCIceCandidate(candidate));
+          }
         } else if (data.candidate) {
-          console.log(`[WebRTC-Host] 🧊 收到玩家发来的 ICE 候选者，正在添加...`);
-          await peer.pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+          if (peer.pc.remoteDescription) {
+            console.log(`[WebRTC-Host] 🧊 收到玩家发来的 ICE 候选者，正在添加...`);
+            await peer.pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+          } else {
+            console.log(`[WebRTC-Host] ⏳ 远程描述尚未就绪，将 ICE 候选者加入缓冲队列...`);
+            peer.iceQueue.push(data.candidate);
+          }
         }
       } catch (err) {
         console.error(`[WebRTC-Host] ❌ 处理玩家信令数据时发生错误:`, err);
