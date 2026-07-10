@@ -18,9 +18,9 @@ const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID; // AC 开头的主账
 const TWILIO_API_KEY = process.env.TWILIO_API_KEY;         // SK 开头的 API Key
 const TWILIO_API_SECRET = process.env.TWILIO_API_SECRET;   // 仅显示一次的 API Secret
 
-console.log("TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID}");
-console.log("TWILIO_API_KEY: ${TWILIO_API_KEY}");
-console.log("TWILIO_API_SECRET: ${TWILIO_API_SECRET}");
+console.log('TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID}');
+console.log('TWILIO_API_KEY: ${TWILIO_API_KEY}');
+console.log('TWILIO_API_SECRET: ${TWILIO_API_SECRET}');
 
 if (!TWILIO_ACCOUNT_SID || !TWILIO_API_KEY || !TWILIO_API_SECRET) {
   console.warn('⚠️ 警告: 未完整检测到 Twilio 环境变量，将导致 TURN 穿透降级！');
