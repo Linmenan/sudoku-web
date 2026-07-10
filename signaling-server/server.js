@@ -13,17 +13,12 @@ const localtunnel = require('localtunnel');
 const path = require('path');
 const twilio = require('twilio');
 
-// 使用更安全的 API Key 模式
-const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID; // AC 开头的主账号 ID
-const TWILIO_API_KEY = process.env.TWILIO_API_KEY;         // SK 开头的 API Key
-const TWILIO_API_SECRET = process.env.TWILIO_API_SECRET;   // 仅显示一次的 API Secret
+// 恢复使用主账号凭证 (Twilio 的 TURN 接口底层不支持 API Key)
+const TWILIO_SID = process.env.TWILIO_SID;     // 必须是 AC 开头的主账号 SID
+const TWILIO_TOKEN = process.env.TWILIO_TOKEN; // 必须是主账号的 Auth Token
 
-console.log(`TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID}`);
-console.log(`TWILIO_API_KEY: ${TWILIO_API_KEY}`);
-console.log(`TWILIO_API_SECRET: ${TWILIO_API_SECRET}`);
-
-if (!TWILIO_ACCOUNT_SID || !TWILIO_API_KEY || !TWILIO_API_SECRET) {
-  console.warn('⚠️ 警告: 未完整检测到 Twilio 环境变量，将导致 TURN 穿透降级！');
+if (!TWILIO_SID || !TWILIO_TOKEN) {
+  console.warn('⚠️ 警告: 未检测到 Twilio 环境变量，将导致 TURN 穿透降级！');
 }
 
 const app = express();
@@ -37,8 +32,8 @@ io.on('connection', (socket) => {
   // 新增：给前端下发 Twilio 动态 TURN 穿透凭证的接口
   socket.on('get-turn-credentials', async (callback) => {
     try {
-      // 核心修改：使用 API Key 初始化客户端必须严格按照这个三个参数的格式
-      const client = twilio(TWILIO_API_KEY, TWILIO_API_SECRET, { accountSid: TWILIO_ACCOUNT_SID });
+      // 核心修改：退回使用基础账户授权
+      const client = twilio(TWILIO_SID, TWILIO_TOKEN);
       const token = await client.tokens.create();
       callback(token.iceServers); // 返回包含了动态账密的专属打洞节点数组
     } catch (err) {
