@@ -325,17 +325,25 @@ btnCreate.addEventListener('click', () => {
   console.log(`[Host] 正在创建房间... 房间号: ${roomId}, 昵称: ${nickname}`);
   const socket = createSocketConnection();
   
-  store.dispatch({ type: 'LOCK_PUZZLE' }); 
-  store.dispatch({ type: 'ADD_PLAYER', payload: { id: 'local', name: nickname, isHost: true } });
-  networkManager = new HostPeerManager(roomId, socket, store, nickname);
-  
-  setupPanel.style.display = 'none';
-  roomIdInput.disabled = true;
-  nicknameInput.disabled = true;
-  btnCreate.style.display = 'none';
-  btnJoin.style.display = 'none';
-  btnLeave.style.display = 'inline-block';
-  btnLeave.innerText = '解散房间';
+  socket.on('connect', () => {
+    socket.emit('get-turn-credentials', (iceServers) => {
+      console.log('[WebRTC] 🔑 成功获取云端动态 TURN 穿透凭证');
+      
+      store.dispatch({ type: 'LOCK_PUZZLE' }); 
+      store.dispatch({ type: 'ADD_PLAYER', payload: { id: 'local', name: nickname, isHost: true } });
+      
+      // 将动态凭证作为第五个参数注入底层
+      networkManager = new HostPeerManager(roomId, socket, store, nickname, { iceServers });
+      
+      setupPanel.style.display = 'none';
+      roomIdInput.disabled = true;
+      nicknameInput.disabled = true;
+      btnCreate.style.display = 'none';
+      btnJoin.style.display = 'none';
+      btnLeave.style.display = 'inline-block';
+      btnLeave.innerText = '解散房间';
+    });
+  });
 });
 
 btnJoin.addEventListener('click', () => {
@@ -363,18 +371,23 @@ btnJoin.addEventListener('click', () => {
         return;
       }
 
-      console.log(`[Guest] ✅ 房间校验通过，正在初始化 P2P 核心模块...`);
-      store = createStore(false, (s) => renderBoard(s)); 
-      networkManager = new GuestPeerManager(roomId, socket, store, nickname); 
-      localPlayerId = socket.id; 
-      store.dispatch({ type: 'ADD_PLAYER', payload: { id: localPlayerId, name: nickname, isHost: false } });
-
-      setupPanel.style.display = 'none';
-      roomIdInput.disabled = true;
-      nicknameInput.disabled = true;
-      btnJoin.style.display = 'none';
-      btnCreate.style.display = 'none';
-      btnLeave.style.display = 'inline-block';
+      console.log(`[Guest] ✅ 房间校验通过，正在请求动态 TURN 凭证...`);
+      socket.emit('get-turn-credentials', (iceServers) => {
+        console.log('[WebRTC] 🔑 成功获取云端动态 TURN 穿透凭证');
+        
+        store = createStore(false, (s) => renderBoard(s)); 
+        // 将动态凭证作为第五个参数注入底层
+        networkManager = new GuestPeerManager(roomId, socket, store, nickname, { iceServers }); 
+        localPlayerId = socket.id; 
+        store.dispatch({ type: 'ADD_PLAYER', payload: { id: localPlayerId, name: nickname, isHost: false } });
+  
+        setupPanel.style.display = 'none';
+        roomIdInput.disabled = true;
+        nicknameInput.disabled = true;
+        btnJoin.style.display = 'none';
+        btnCreate.style.display = 'none';
+        btnLeave.style.display = 'inline-block';
+      });
     });
   });
 });

@@ -11,6 +11,15 @@ const http = require('http');
 const { Server } = require('socket.io');
 const localtunnel = require('localtunnel');
 const path = require('path');
+const twilio = require('twilio');
+
+// 从环境变量中安全读取凭证
+const TWILIO_SID = process.env.TWILIO_SID;
+const TWILIO_TOKEN = process.env.TWILIO_TOKEN;
+
+if (!TWILIO_SID || !TWILIO_TOKEN) {
+  console.warn('⚠️ 警告: 未检测到 Twilio 环境变量，将导致 TURN 穿透降级！');
+}
 
 const app = express();
 const server = http.createServer(app);
@@ -20,6 +29,18 @@ const io = new Server(server, { cors: { origin: '*' } });
 app.use(express.static(path.join(__dirname, '../client/dist')));
 
 io.on('connection', (socket) => {
+  // 新增：给前端下发 Twilio 动态 TURN 穿透凭证的接口
+  socket.on('get-turn-credentials', async (callback) => {
+    try {
+      const client = twilio(TWILIO_SID, TWILIO_TOKEN);
+      const token = await client.tokens.create();
+      callback(token.iceServers); // 返回包含了动态账密的专属打洞节点数组
+    } catch (err) {
+      console.error('获取 Twilio TURN 凭证失败:', err);
+      callback([{ urls: 'stun:stun.miwifi.com:3478' }, { urls: 'stun:stun.qq.com:3478' }]); // 降级方案
+    }
+  });
+
   socket.on('create-room', ({ roomId, nickname }) => {
     socket.join(roomId);
     socket.nickname = nickname; 
