@@ -19,6 +19,8 @@ const TWILIO_TOKEN = process.env.TWILIO_TOKEN; // 必须是主账号的 Auth Tok
 
 if (!TWILIO_SID || !TWILIO_TOKEN) {
   console.warn('⚠️ 警告: 未检测到 Twilio 环境变量，将导致 TURN 穿透降级！');
+}else{
+  console.log(`检测到 Twilio 环境变量${TWILIO_SID},TWILIO_TOKEN${TWILIO_TOKEN}`);
 }
 
 const app = express();
