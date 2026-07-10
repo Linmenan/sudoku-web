@@ -368,9 +368,9 @@ btnJoin.addEventListener('click', () => {
 
       console.log(`[Guest] ✅ 房间校验通过，正在请求动态 TURN 凭证...`);
       socket.emit('get-turn-credentials', (iceServers) => {
-        console.log('[WebRTC] 🔑 成功获取云端动态 TURN 穿透凭证');
+        console.log('[WebRTC] 🔑 云端下发的 ICE 凭证内容:', iceServers);
         
-        store = createStore(false, (s) => renderBoard(s)); 
+        store = createStore(false, (s) => renderBoard(s));
         // 将动态凭证作为第五个参数注入底层
         networkManager = new GuestPeerManager(roomId, socket, store, nickname, { iceServers }); 
         localPlayerId = socket.id; 
