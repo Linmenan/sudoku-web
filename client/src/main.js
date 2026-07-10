@@ -22,19 +22,6 @@ const btnLeave = document.getElementById('btnLeave');
 const winModal = document.getElementById('winModal');
 const scoreBoard = document.getElementById('scoreBoard');
 
-// 智能检测信令服务器地址（无缝适配本地开发、局域网及公网穿透）
-if (serverUrlInput) {
-  if ((window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') && window.location.port === '5173') {
-    serverUrlInput.value = 'http://localhost:3000';
-  } else {
-    // 生产模式 / 穿透模式：公网穿透必须强制使用 HTTPS 协议，防止 WebSocket 握手失败和 timeout
-    const host = window.location.hostname;
-    const isPublicNetwork = host.includes('.') && !host.match(/^\d+\.\d+\.\d+\.\d+$/) && host !== 'localhost' && host !== '127.0.0.1';
-    const protocol = isPublicNetwork ? 'https:' : window.location.protocol;
-    serverUrlInput.value = `${protocol}//${window.location.host}`;
-  }
-}
-
 const virtualKeyboard = document.getElementById('virtualKeyboard');
 const vkModeToggle = document.getElementById('vkModeToggle');
 
