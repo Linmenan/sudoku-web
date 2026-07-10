@@ -4,9 +4,11 @@
 export class HostPeerManager {
   constructor(roomId, socket, store, nickname, iceConfig = { 
     iceServers: [
-      { urls: 'stun:stun.qq.com:3478' },
-      { urls: 'stun:stun.miwifi.com:3478' },
       { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' },
+      { urls: 'stun:stun.miwifi.com:3478' },       // 小米
+      { urls: 'stun:stun.qq.com:3478' },           // 腾讯
+      { urls: 'stun:stun.chat.bilibili.com:3478' }, // B站
       {
         urls: 'turn:openrelay.metered.ca:80',
         username: 'openrelayproject',

@@ -58,7 +58,8 @@ io.on('connection', (socket) => {
   });
 });
 
-const PORT = 3000;
+// 优先使用云平台注入的环境变量端口，本地运行则回退到 3000
+const PORT = process.env.PORT || 3000;
 server.listen(PORT, async () => {
   console.log(`💻 本地服务已启动: http://localhost:${PORT}`);
   
