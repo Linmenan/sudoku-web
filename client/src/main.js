@@ -21,7 +21,6 @@ const nicknameInput = document.getElementById('nicknameInput');
 const btnLeave = document.getElementById('btnLeave');
 const winModal = document.getElementById('winModal');
 const scoreBoard = document.getElementById('scoreBoard');
-const serverUrlInput = document.getElementById('serverUrlInput');
 
 // 智能检测信令服务器地址（无缝适配本地开发、局域网及公网穿透）
 if (serverUrlInput) {
@@ -278,7 +277,16 @@ function renderBoard(state) {
 }
 
 function createSocketConnection() {
-  const serverUrl = serverUrlInput ? serverUrlInput.value.trim() : 'http://localhost:3000';
+  let serverUrl = 'http://localhost:3000';
+  const host = window.location.hostname;
+  
+  // 完全脱离 UI，通过当前域名智能推断 WebSocket 地址
+  if ((host !== 'localhost' && host !== '127.0.0.1') || window.location.port !== '5173') {
+    const isPublicNetwork = host.includes('.') && !host.match(/^\d+\.\d+\.\d+\.\d+$/) && host !== 'localhost' && host !== '127.0.0.1';
+    const protocol = isPublicNetwork ? 'https:' : window.location.protocol;
+    serverUrl = `${protocol}//${window.location.host}`;
+  }
+
   console.log(`[Socket] 尝试连接信令服务器: ${serverUrl}`);
   const socket = io(serverUrl, {
     reconnectionAttempts: 3,
@@ -327,7 +335,7 @@ btnCreate.addEventListener('click', () => {
   
   socket.on('connect', () => {
     socket.emit('get-turn-credentials', (iceServers) => {
-      console.log('[WebRTC] 🔑 成功获取云端动态 TURN 穿透凭证');
+      console.log('[WebRTC] 🔑 云端下发的 ICE 凭证内容:', iceServers);
       
       store.dispatch({ type: 'LOCK_PUZZLE' }); 
       store.dispatch({ type: 'ADD_PLAYER', payload: { id: 'local', name: nickname, isHost: true } });
