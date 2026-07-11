@@ -39,8 +39,11 @@ export class HostPeerManager {
 
     // 监听来自降级 Guest 的中继请求
     this.socket.on('relay-action', ({ from, action }) => {
-      if (this.peers[from] && this.peers[from].isRelayMode) {
-        const updatedState = this.store.dispatch(action, from);
+      if (this.peers[from]) {
+        // 核心修复：强制放行！只要收到 Guest 被迫发送的中继请求，立刻为其激活服务器中继，解决玩家无法操作的 Bug！
+        this.peers[from].isRelayMode = true; 
+        const realPlayerId = this.peers[from].playerId || from; 
+        const updatedState = this.store.dispatch(action, realPlayerId);
         this.broadcast({ type: 'SYNC', payload: updatedState });
       }
     });

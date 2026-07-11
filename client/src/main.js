@@ -43,30 +43,33 @@ const getPersistentPlayerId = () => {
 };
 
 let networkManager = null;
-let store = createStore(false, (s) => renderBoard(s)); 
+let store = createStore((s) => renderBoard(s)); 
 let localPlayerId = getPersistentPlayerId();
 let isNoteMode = false;
 
-// 核心修复：立即为本地玩家初始化数据，确保在 SETUP（出题）模式下点击单元格能显示焦点边框
+// 核心修复：立即为本地玩家赋予合法席位，这样在 SETUP（出题）模式下才能分配专属颜色和渲染焦点框
 store.dispatch({ type: 'ADD_PLAYER', payload: { id: localPlayerId, name: '我', isHost: false } });
 
-// 新增：提取通用方法，隐藏输入控件并展示纯文本房间信息
+// 核心修复：动态创建纯文本房间信息 UI，彻底替代冻结的冗余输入框，防止报找不到 DOM 的错
 function showRoomInfoUI(roomId, nickname, password, isHost) {
-  const infoDiv = document.getElementById('roomInfoDisplay');
-  const role = isHost ? '👑 房主' : '👤 玩家';
-  let html = `<strong>${role}:</strong> ${nickname} &nbsp;&nbsp; <strong>🏠 房间号:</strong> ${roomId}`;
-  if (password) {
-    html += ` &nbsp;&nbsp; <strong>🔒 密码:</strong> ${password}`;
-  } else {
-    html += ` &nbsp;&nbsp; <strong>🔓 公开房间</strong>`;
+  let infoDiv = document.getElementById('roomInfoDisplay');
+  if (!infoDiv) {
+    infoDiv = document.createElement('div');
+    infoDiv.id = 'roomInfoDisplay';
+    infoDiv.style.cssText = 'padding: 10px; background: #e3f2fd; border-radius: 8px; width: 100%; max-width: 600px; box-sizing: border-box; font-size: 15px; color: #1565c0; margin-bottom: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;';
+    document.getElementById('controls').insertBefore(infoDiv, document.getElementById('winModal'));
   }
-  infoDiv.innerHTML = html;
-  infoDiv.style.display = 'block';
-
+  const role = isHost ? '👑 房主' : '👤 玩家';
+  const pwdText = password ? `<span style="color:#d32f2f">🔒 密码: ${password}</span>` : `<span style="color:#388e3c">🔓 公开房间</span>`;
+  infoDiv.innerHTML = `<div><strong>${role}:</strong> ${nickname} &nbsp;&nbsp; <strong>🏠 房间号:</strong> ${roomId} &nbsp;&nbsp; ${pwdText}</div>`;
+  
+  // 大扫除：隐藏所有碍眼的交互控件
   document.getElementById('nicknameInput').style.display = 'none';
   document.getElementById('roomIdInput').style.display = 'none';
-  document.getElementById('isPrivateCheck').parentElement.style.display = 'none';
-  document.getElementById('passwordInput').style.display = 'none';
+  const isPrivateCheck = document.getElementById('isPrivateCheck');
+  if (isPrivateCheck) isPrivateCheck.parentElement.style.display = 'none';
+  const pwdInput = document.getElementById('passwordInput');
+  if (pwdInput) pwdInput.style.display = 'none';
   document.getElementById('btnCreate').style.display = 'none';
   document.getElementById('btnJoin').style.display = 'none';
   document.getElementById('btnLeave').style.display = 'inline-block';
@@ -466,12 +469,14 @@ btnJoin.addEventListener('click', () => {
       socket.emit('get-turn-credentials', (iceServers) => {
         console.log('[WebRTC] 🔑 云端下发的 ICE 凭证内容:', iceServers);
         
-        // 核心修复：如果是断线重连触发的 connect，千万不要重置 store（保留之前的盘面状态）
+        // 核心修复：如果是断线重连触发的 connect，彻底断开旧的底层 WebRTC 防止 InvalidStateError
+        if (networkManager && networkManager.pc) {
+          networkManager.pc.close();
+        }
+        
+        // 如果是初次加入，则重置 store；若是断线重连，千万不要重置（保留之前的盘面状态）
         if (!networkManager) {
-          store = createStore(false, (s) => renderBoard(s));
-        } else {
-          // 断开旧的网络实例，防止监听器重复引发 InvalidStateError
-          if (networkManager.pc) networkManager.pc.close();
+          store = createStore((s) => renderBoard(s)); // 移除了废弃的 isHost 参数
         }
 
         // 不再使用转瞬即逝的 socket.id，而是注入本地固化的 localPlayerId

@@ -3,7 +3,7 @@
 // 预设玩家颜色池
 const PLAYER_COLORS = ['#1976d2', '#d32f2f', '#388e3c', '#f57c00', '#7b1fa2', '#c2185b'];
 
-export const createStore = (isHost = false, onStateChange = () => {}) => {
+export const createStore = (onStateChange = () => {}) => {
   let state = {
     phase: 'SETUP',
     board: Array(81).fill(null),
@@ -11,7 +11,7 @@ export const createStore = (isHost = false, onStateChange = () => {}) => {
     notes: Array(81).fill().map(() => []),
     focuses: {},
     players: {},
-    cellOwners: Array(81).fill(null), // 新增：记录每个格子最后是谁填对的
+    cellOwners: Array(81).fill(null),
   };
 
   const getRowColGrid = (index) => {
