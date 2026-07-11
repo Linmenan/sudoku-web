@@ -76,6 +76,14 @@
     .vk-key.vk-mode { background: #e0e0e0; color: #333; border-color: #bbb; box-shadow: 0 2px 0 #999; }
     .vk-key.vk-mode.active { background: #ffeb3b; color: #f57f17; border-color: #fbc02d; box-shadow: 0 2px 0 #f9a825; }
     .vk-key.vk-delete { color: #d32f2f; }
+
+    /* 滑动开关 (Toggle Switch) 样式 */
+    .switch { position: relative; display: inline-block; width: 40px; height: 20px; }
+    .switch input { opacity: 0; width: 0; height: 0; }
+    .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; transition: .4s; border-radius: 20px; }
+    .slider:before { position: absolute; content: ""; height: 16px; width: 16px; left: 2px; bottom: 2px; background-color: white; transition: .4s; border-radius: 50%; }
+    input:checked + .slider { background-color: #f57c00; }
+    input:checked + .slider:before { transform: translateX(20px); }
   </style>
   <script src="https://unpkg.com/vconsole@latest/dist/vconsole.min.js"></script>
   <script>
@@ -88,6 +96,15 @@
   <div id="controls">
     <div class="setup-panel" id="setupPanel">
       <div style="margin-bottom: 10px;">阶段：出题模式 (请点击下方格子并用键盘 1-9 填入数字)</div>
+      
+      <div style="margin-bottom: 10px; display: flex; align-items: center; font-size: 14px;">
+        <label class="switch">
+          <input type="checkbox" id="debugModeCheck">
+          <span class="slider"></span>
+        </label>
+        <span style="margin-left: 8px; color: #f57c00; font-weight: bold;">快速 Debug 模式 (无视解题限制直接开房)</span>
+      </div>
+
       <button id="btnVerify">验证谜题可解性</button>
       <button id="btnClear">一键清空</button>
       <span id="statusText"></span>

@@ -26,6 +26,19 @@ const virtualKeyboard = document.getElementById('virtualKeyboard');
 const vkModeToggle = document.getElementById('vkModeToggle');
 const isPrivateCheck = document.getElementById('isPrivateCheck');
 const passwordInput = document.getElementById('passwordInput');
+const debugModeCheck = document.getElementById('debugModeCheck');
+
+// 绑定快速 Debug 模式开关逻辑
+debugModeCheck.addEventListener('change', (e) => {
+  if (e.target.checked) {
+    btnCreate.disabled = false;
+    statusText.style.color = '#f57c00';
+    statusText.innerText = '⚠️ Debug 模式：已解除验证限制';
+  } else {
+    btnCreate.disabled = true;
+    statusText.innerText = '';
+  }
+});
 
 // 绑定私密房间勾选框的显隐逻辑
 isPrivateCheck.addEventListener('change', (e) => {
@@ -160,8 +173,11 @@ function handleInput(key) {
     executeAction({ type: 'FILL_NUM', payload: { index: focusedIndex, value: valToFill } });
     
     if (state.phase === 'SETUP' && oldVal !== valToFill) {
-      statusText.innerText = '';
-      btnCreate.disabled = true;
+      // 如果没有开启 Debug 模式，修改盘面依然会重置开房按钮并要求重新验证
+      if (!debugModeCheck.checked) {
+        statusText.innerText = '';
+        btnCreate.disabled = true;
+      }
     }
 
     if (store.getState().phase === 'PLAYING') {
@@ -245,7 +261,9 @@ btnClear.addEventListener('click', () => {
     executeAction({ type: 'CLEAR_BOARD' });
     statusText.innerText = '盘面已清空';
     statusText.style.color = 'black';
-    btnCreate.disabled = true;
+    if (!debugModeCheck.checked) {
+      btnCreate.disabled = true;
+    }
   }
 });
 
