@@ -22,6 +22,12 @@ export class HostPeerManager {
     this.password = password; // 可能为 null (公开), string (私密), 或 undefined (迁移时)
     this.peers = {};
 
+    // 核心修复：清除由于角色转换或断线重连导致的旧监听器
+    this.socket.off('relay-action');
+    this.socket.off('player-joined');
+    this.socket.off('signal');
+    this.socket.off('player-disconnected');
+
     console.log(`[WebRTC-Host] 👑 房主网络管理器已启动，房间号: ${this.roomId}`);
     this.initSignaling();
   }
@@ -52,8 +58,24 @@ export class HostPeerManager {
         
         const iceQueue = []; 
         
+        // 核心修复：设置 5 秒强制降级超时。避免 WebRTC 卡在 checking 状态导致玩家无法操作
+        const fallbackTimer = setTimeout(() => {
+          if (pc.iceConnectionState !== 'connected' && pc.iceConnectionState !== 'completed') {
+            console.warn(`[WebRTC-Host] ⏳ 与玩家 ${nickname} 的 P2P 穿透耗时过长，强制启用 WebSocket 服务器中继模式！`);
+            if (this.peers[socketId] && !this.peers[socketId].isRelayMode) {
+              this.peers[socketId].isRelayMode = true;
+              this.socket.emit('relay-action', { to: socketId, action: { type: 'SYNC', payload: this.store.getState() } });
+            }
+          }
+        }, 5000);
+        
         pc.oniceconnectionstatechange = () => {
           console.log(`[WebRTC-Host] 📡 与玩家 ${nickname} 的底层连接状态改变为: ✨ ${pc.iceConnectionState} ✨`);
+          
+          if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
+            clearTimeout(fallbackTimer);
+          }
+
           if (pc.iceConnectionState === 'failed' || pc.iceConnectionState === 'disconnected') {
             console.error(`[WebRTC-Host] ❌ 与玩家 ${nickname} 的 P2P 穿透中断或失败！直连已被阻断。`);
             

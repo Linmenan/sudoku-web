@@ -14,11 +14,6 @@ export const createStore = (isHost = false, onStateChange = () => {}) => {
     cellOwners: Array(81).fill(null), // 新增：记录每个格子最后是谁填对的
   };
 
-  // 如果是房主，初始化本地玩家
-  if (isHost) {
-    state.players['local'] = { name: '房主 (Host)', color: PLAYER_COLORS[0] };
-  }
-
   const getRowColGrid = (index) => {
     const row = Math.floor(index / 9);
     const col = index % 9;

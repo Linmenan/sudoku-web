@@ -24,11 +24,27 @@ export class GuestPeerManager {
     this.hostId = null;
     this.isRelayMode = false; // 降级标志位
 
+    // 核心修复：清除由于断线重连可能遗留的旧监听器，防止事件重复触发导致 InvalidStateError
+    this.socket.off('relay-action');
+    this.socket.off('signal');
+
     console.log(`[WebRTC-Guest] 👤 玩家网络管理器已启动，准备连接房间: ${this.roomId}`);
     
+    // 核心修复：设置 5 秒强制降级超时。如果 WebRTC 一直卡在 checking，直接激活 WebSocket 中继，保证 100% 能玩
+    const fallbackTimer = setTimeout(() => {
+      if (this.pc.iceConnectionState !== 'connected' && this.pc.iceConnectionState !== 'completed') {
+        console.warn(`[WebRTC-Guest] ⏳ P2P 穿透耗时过长，强制无缝降级为 WebSocket 服务器中继模式！`);
+        this.isRelayMode = true;
+      }
+    }, 5000);
+
     this.pc.oniceconnectionstatechange = () => {
       console.log(`[WebRTC-Guest] 📡 底层 P2P 连接状态改变为: ✨ ${this.pc.iceConnectionState} ✨`);
-      // 核心修复：增加对 disconnected 的捕获。很多网络环境下，打洞失败会长时间卡在 disconnected 而不触发 failed
+      
+      if (this.pc.iceConnectionState === 'connected' || this.pc.iceConnectionState === 'completed') {
+        clearTimeout(fallbackTimer); // 连接成功，取消强制降级
+      }
+
       if (this.pc.iceConnectionState === 'failed' || this.pc.iceConnectionState === 'disconnected') {
         console.error(`[WebRTC-Guest] ❌ P2P 直连断开或打洞失败！极高难度 NAT 阻断了连接。`);
         if (!this.isRelayMode) {

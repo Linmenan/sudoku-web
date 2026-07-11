@@ -43,9 +43,35 @@ const getPersistentPlayerId = () => {
 };
 
 let networkManager = null;
-let store = createStore(true, (s) => renderBoard(s)); 
+let store = createStore(false, (s) => renderBoard(s)); 
 let localPlayerId = getPersistentPlayerId();
 let isNoteMode = false;
+
+// 核心修复：立即为本地玩家初始化数据，确保在 SETUP（出题）模式下点击单元格能显示焦点边框
+store.dispatch({ type: 'ADD_PLAYER', payload: { id: localPlayerId, name: '我', isHost: false } });
+
+// 新增：提取通用方法，隐藏输入控件并展示纯文本房间信息
+function showRoomInfoUI(roomId, nickname, password, isHost) {
+  const infoDiv = document.getElementById('roomInfoDisplay');
+  const role = isHost ? '👑 房主' : '👤 玩家';
+  let html = `<strong>${role}:</strong> ${nickname} &nbsp;&nbsp; <strong>🏠 房间号:</strong> ${roomId}`;
+  if (password) {
+    html += ` &nbsp;&nbsp; <strong>🔒 密码:</strong> ${password}`;
+  } else {
+    html += ` &nbsp;&nbsp; <strong>🔓 公开房间</strong>`;
+  }
+  infoDiv.innerHTML = html;
+  infoDiv.style.display = 'block';
+
+  document.getElementById('nicknameInput').style.display = 'none';
+  document.getElementById('roomIdInput').style.display = 'none';
+  document.getElementById('isPrivateCheck').parentElement.style.display = 'none';
+  document.getElementById('passwordInput').style.display = 'none';
+  document.getElementById('btnCreate').style.display = 'none';
+  document.getElementById('btnJoin').style.display = 'none';
+  document.getElementById('btnLeave').style.display = 'inline-block';
+  if (isHost) document.getElementById('btnLeave').innerText = '解散房间';
+}
 
 function updateModeToggleUI() {
   const modeText = isNoteMode ? '📝 备注模式 (On)' : '📝 备注模式 (Off)';
@@ -371,12 +397,7 @@ btnCreate.addEventListener('click', () => {
       networkManager = new HostPeerManager(roomId, socket, store, nickname, { iceServers }, localPlayerId, password);
       
       setupPanel.style.display = 'none';
-      roomIdInput.disabled = true;
-      nicknameInput.disabled = true;
-      btnCreate.style.display = 'none';
-      btnJoin.style.display = 'none';
-      btnLeave.style.display = 'inline-block';
-      btnLeave.innerText = '解散房间';
+      showRoomInfoUI(roomId, nickname, password, true);
     });
   });
 });
@@ -445,17 +466,20 @@ btnJoin.addEventListener('click', () => {
       socket.emit('get-turn-credentials', (iceServers) => {
         console.log('[WebRTC] 🔑 云端下发的 ICE 凭证内容:', iceServers);
         
-        store = createStore(false, (s) => renderBoard(s));
-        // 核心修改：不再使用转瞬即逝的 socket.id，而是注入本地固化的 localPlayerId
+        // 核心修复：如果是断线重连触发的 connect，千万不要重置 store（保留之前的盘面状态）
+        if (!networkManager) {
+          store = createStore(false, (s) => renderBoard(s));
+        } else {
+          // 断开旧的网络实例，防止监听器重复引发 InvalidStateError
+          if (networkManager.pc) networkManager.pc.close();
+        }
+
+        // 不再使用转瞬即逝的 socket.id，而是注入本地固化的 localPlayerId
         networkManager = new GuestPeerManager(roomId, socket, store, nickname, { iceServers }, localPlayerId); 
         store.dispatch({ type: 'ADD_PLAYER', payload: { id: localPlayerId, name: nickname, isHost: false } });
   
         setupPanel.style.display = 'none';
-        roomIdInput.disabled = true;
-        nicknameInput.disabled = true;
-        btnJoin.style.display = 'none';
-        btnCreate.style.display = 'none';
-        btnLeave.style.display = 'inline-block';
+        showRoomInfoUI(roomId, nickname, password, false);
       });
     });
   });
