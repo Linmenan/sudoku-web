@@ -2,7 +2,7 @@
  * @Author: yanyu yanyu1@xcmg.com
  * @Date: 2026-07-08 15:23:30
  * @LastEditors: yanyu yanyu1@xcmg.com
- * @LastEditTime: 2026-07-08 17:59:22
+ * @LastEditTime: 2026-07-11 14:55:09
  * @FilePath: /sudoku-webrtc/client/src/sudoku/solver.js
  * @Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
  */
@@ -14,7 +14,7 @@
  * @returns {number} 0(无解), 1(唯一解), 2(多解)
  */
 export function countSolutions(boardArr) {
-  return 1;
+  // return 1;
   let solutions = 0;
   // 将一维数组转换为 9x9 二维数组，方便逻辑判断
   let board = [];
