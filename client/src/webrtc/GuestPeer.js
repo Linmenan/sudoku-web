@@ -28,14 +28,17 @@ export class GuestPeerManager {
     this.iceConfig = iceConfig;
     this.pc = new RTCPeerConnection(this.iceConfig);
     this.channel = null;
+    this.hostId = null;
+    this.isRelayMode = false; // 降级标志位
 
     console.log(`[WebRTC-Guest] 👤 玩家网络管理器已启动，准备连接房间: ${this.roomId}`);
     
     this.pc.oniceconnectionstatechange = () => {
       console.log(`[WebRTC-Guest] 📡 底层 P2P 连接状态改变为: ✨ ${this.pc.iceConnectionState} ✨`);
       if (this.pc.iceConnectionState === 'failed') {
-        console.error(`[WebRTC-Guest] ❌ 致命错误：P2P 直连打洞失败！如果是手机网络，极大可能是因为运营商的 Symmetric NAT (对称型防火墙) 拦截了连接，这需要部署自建 TURN 服务器才能解决。`);
-        alert('❌ 无法建立 P2P 直连！您当前的网络（可能是校园网或运营商移动网络）屏蔽了直接通信。请尝试切换到普通家庭 Wi-Fi。');
+        console.error(`[WebRTC-Guest] ❌ P2P 直连打洞失败！检测到极高难度 NAT (很可能为对称型 NAT) 阻断连接。`);
+        console.warn(`[WebRTC-Guest] 🛡️ 启动备用预案：正在自动降级为 WebSocket 服务器中继模式...`);
+        this.isRelayMode = true;
       }
     };
 
@@ -47,7 +50,16 @@ export class GuestPeerManager {
     this.socket.emit('join-room', { roomId: this.roomId, nickname: this.nickname });
     this.iceQueue = []; // 新增：ICE 候选者缓冲队列
 
+    // 监听中继信道，当打洞失败时使用
+    this.socket.on('relay-action', ({ from, action }) => {
+      if (action.type === 'SYNC') {
+        console.log(`[WebRTC-Guest] 🔄 收到中继服务器转发的全量同步数据！`);
+        this.store.setState(action.payload);
+      }
+    });
+
     this.socket.on('signal', async ({ from, data }) => {
+      this.hostId = from; // 动态捕获房主的 socketId，用于打洞失败后发中继消息
       try {
         if (data.sdp && data.sdp.type === 'offer') {
           console.log(`[WebRTC-Guest] 📥 收到房主发来的 Offer! 准备设置为远程描述...`);
@@ -63,7 +75,10 @@ export class GuestPeerManager {
           
           this.pc.onicecandidate = (event) => {
             if (event.candidate) {
-              console.log(`[WebRTC-Guest] 🧊 收集到玩家本地 ICE 候选者，发送给房主...`);
+              const type = event.candidate.type; // host, srflx (STUN), relay (TURN)
+              console.log(`[WebRTC-Guest] 🧊 探测到本地网络节点: [${type.toUpperCase()}] ${event.candidate.address}:${event.candidate.port}`);
+              if (type === 'relay') console.log(`[WebRTC-Guest] 💡 检测到云端 TURN 中继节点就绪，尝试辅助穿透...`);
+              if (type === 'srflx') console.log(`[WebRTC-Guest] 🔍 NAT 外网映射地址收集完毕！`);
               this.socket.emit('signal', { to: from, data: { candidate: event.candidate } });
             }
           };
@@ -108,10 +123,13 @@ export class GuestPeerManager {
   }
 
   sendAction(action) {
-    if (this.channel && this.channel.readyState === 'open') {
+    if (this.isRelayMode && this.hostId) {
+      // 降级模式下，将游戏操作打包给信令服务器进行物理转发
+      this.socket.emit('relay-action', { to: this.hostId, action });
+    } else if (this.channel && this.channel.readyState === 'open') {
       this.channel.send(JSON.stringify(action));
     } else {
-      console.warn(`[WebRTC-Guest] ⚠️ 尝试发送操作，但通道尚未准备好！`);
+      console.warn(`[WebRTC-Guest] ⚠️ 尝试发送操作，但底层通道尚未准备完毕！`);
     }
   }
 }

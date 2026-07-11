@@ -2,7 +2,7 @@
  * @Author: yanyu yanyu1@xcmg.com
  * @Date: 2026-07-09 09:12:09
  * @LastEditors: yanyu yanyu1@xcmg.com
- * @LastEditTime: 2026-07-09 10:38:16
+ * @LastEditTime: 2026-07-11 14:12:31
  * @FilePath: /sudoku-webrtc/signaling-server/server.js
  * @Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
  */
@@ -75,6 +75,11 @@ io.on('connection', (socket) => {
 
   socket.on('signal', ({ to, targetId, data }) => {
     io.to(to).emit('signal', { from: socket.id, data });
+  });
+
+  // 新增：WebSocket 中继通道，用于在 P2P 打洞失败时作为终极降级方案
+  socket.on('relay-action', ({ to, action }) => {
+    io.to(to).emit('relay-action', { from: socket.id, action });
   });
 
   socket.on('disconnect', () => {

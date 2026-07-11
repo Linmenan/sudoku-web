@@ -35,6 +35,14 @@ export class HostPeerManager {
   initSignaling() {
     this.socket.emit('create-room', { roomId: this.roomId, nickname: this.nickname });
 
+    // 监听来自降级 Guest 的中继请求
+    this.socket.on('relay-action', ({ from, action }) => {
+      if (this.peers[from] && this.peers[from].isRelayMode) {
+        const updatedState = this.store.dispatch(action, from);
+        this.broadcast({ type: 'SYNC', payload: updatedState });
+      }
+    });
+
     this.socket.on('player-joined', async ({ id: guestId, nickname }) => {
       console.log(`[WebRTC-Host] 🔔 收到玩家加入通知! 玩家: ${nickname} (ID: ${guestId})`);
       
@@ -50,7 +58,14 @@ export class HostPeerManager {
         pc.oniceconnectionstatechange = () => {
           console.log(`[WebRTC-Host] 📡 与玩家 ${nickname} 的底层连接状态改变为: ✨ ${pc.iceConnectionState} ✨`);
           if (pc.iceConnectionState === 'failed') {
-            console.error(`[WebRTC-Host] ❌ 警告：与玩家 ${nickname} 的 P2P 穿透失败！很可能是对方处于严格的 NAT 网络(如手机 4G/5G)，需要 TURN 服务器中继。`);
+            console.error(`[WebRTC-Host] ❌ 与玩家 ${nickname} 的 P2P 穿透失败！检测到高难度 NAT，直连已被阻断。`);
+            console.warn(`[WebRTC-Host] 🛡️ 正在针对该玩家启用 WebSocket 服务器中继模式...`);
+            
+            if (this.peers[guestId]) {
+              this.peers[guestId].isRelayMode = true;
+              // 关键操作：切换中继后，主动通过信令服务器全量推送一次盘面，拉齐数据状态
+              this.socket.emit('relay-action', { to: guestId, action: { type: 'SYNC', payload: this.store.getState() } });
+            }
           }
         };
 
@@ -58,11 +73,14 @@ export class HostPeerManager {
         console.log(`[WebRTC-Host] 🛤️ 已创建 DataChannel 通道: game-data`);
         this.setupChannel(guestId, channel, nickname);
 
-        this.peers[guestId] = { pc, channel, iceQueue };
+        // 维护标志位 isRelayMode
+        this.peers[guestId] = { pc, channel, iceQueue, isRelayMode: false };
 
         pc.onicecandidate = (event) => {
           if (event.candidate) {
-            console.log(`[WebRTC-Host] 🧊 收集到房主本地 ICE 候选者，发送给玩家...`);
+            const type = event.candidate.type;
+            console.log(`[WebRTC-Host] 🧊 探测到房主网络节点: [${type.toUpperCase()}] ${event.candidate.address}:${event.candidate.port}`);
+            if (type === 'relay') console.log(`[WebRTC-Host] 💡 检测到云端 TURN 中继节点就绪，尝试辅助穿透...`);
             this.socket.emit('signal', { to: guestId, data: { candidate: event.candidate } });
           }
         };
@@ -139,8 +157,12 @@ export class HostPeerManager {
 
   broadcast(message) {
     const data = JSON.stringify(message);
-    Object.values(this.peers).forEach(peer => {
-      if (peer.channel && peer.channel.readyState === 'open') {
+    Object.entries(this.peers).forEach(([guestId, peer]) => {
+      if (peer.isRelayMode) {
+        // 如果该玩家 P2P 失败，则智能路由到信令服务器去代发
+        this.socket.emit('relay-action', { to: guestId, action: message });
+      } else if (peer.channel && peer.channel.readyState === 'open') {
+        // 如果是优质网络玩家，直接通过 DataChannel 发送
         peer.channel.send(data);
       }
     });
