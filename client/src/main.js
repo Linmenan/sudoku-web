@@ -59,6 +59,10 @@ function showRoomInfoUI(roomId, nickname, password, isHost) {
     infoDiv.style.cssText = 'padding: 10px; background: #e3f2fd; border-radius: 8px; width: 100%; max-width: 600px; box-sizing: border-box; font-size: 15px; color: #1565c0; margin-bottom: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;';
     document.getElementById('controls').insertBefore(infoDiv, document.getElementById('winModal'));
   }
+  
+  // 核心修复：无论该节点是新建的还是 HTML 页面静态自带的，都必须强制将其显现出来
+  infoDiv.style.display = 'flex';
+
   const role = isHost ? '👑 房主' : '👤 玩家';
   const pwdText = password ? `<span style="color:#d32f2f">🔒 密码: ${password}</span>` : `<span style="color:#388e3c">🔓 公开房间</span>`;
   infoDiv.innerHTML = `<div><strong>${role}:</strong> ${nickname} &nbsp;&nbsp; <strong>🏠 房间号:</strong> ${roomId} &nbsp;&nbsp; ${pwdText}</div>`;
@@ -417,11 +421,25 @@ btnJoin.addEventListener('click', () => {
   socket.on('host-migrated', ({ newHostSocketId, gameState }) => {
     console.log(`[Migration] 🔄 收到房主变更广播！新房主 Socket ID: ${newHostSocketId}`);
     
-    // 1. 彻底切断旧的 WebRTC 物理连接，防止底层串台干扰
+    // 1. 增加 try-catch 护城河：防止由于底层连接状态不匹配抛错导致整个 JS 线程挂掉
     if (networkManager) {
-      if (networkManager.pc) networkManager.pc.close();
-      if (networkManager.channel) networkManager.channel.close();
+      try {
+        if (networkManager.pc) networkManager.pc.close();
+        if (networkManager.channel) networkManager.channel.close();
+      } catch (err) {
+        console.warn(`[Migration] ⚠️ 清理旧底层连接时忽略异常:`, err);
+      }
     }
+
+    // 2. 幽灵数据清洗：剥夺原房主的星星标志，并强制清除原房主可能残留的焦点框
+    Object.keys(gameState.players).forEach(pId => {
+      if (gameState.players[pId].name.startsWith('⭐ ')) {
+        gameState.players[pId].name = gameState.players[pId].name.replace('⭐ ', '');
+      }
+      gameState.focuses[pId] = null;
+    });
+
+    const currentPwd = isPrivateCheck.checked ? passwordInput.value : null;
 
     if (socket.id === newHostSocketId) {
       console.log(`[Migration] 👑 临危受命！我已被提拔为新房主！接管整个盘面...`);
@@ -431,11 +449,19 @@ btnJoin.addEventListener('click', () => {
       
       // 华丽转身，重新实例化为房主网络管理器 (无缝继承原有的 TURN 凭证和固化身份)
       networkManager = new HostPeerManager(roomId, socket, store, nickname, networkManager.iceConfig, localPlayerId);
+      
+      // 核心修复：身份转变后，必须重新调用渲染更新，确保顶部房间状态 UI 为最新且可见
+      showRoomInfoUI(roomId, nickname, currentPwd, true);
     } else {
       console.log(`[Migration] 🔌 房主已易主，准备向新房主重新发起连接...`);
+      // 提前应用洗净的盘面，避免等待的 1.5 秒内画面闪烁
+      store.setState(gameState);
+      
       // 延迟 1.5 秒，给新房主创建 RTCPeerConnection 容器的缓冲时间
       setTimeout(() => {
         networkManager = new GuestPeerManager(roomId, socket, store, nickname, networkManager.iceConfig, localPlayerId);
+        // 核心修复：确保玩家在重新建立连接期间，其顶部的房间及密码信息依然挂载显示
+        showRoomInfoUI(roomId, nickname, currentPwd, false);
       }, 1500);
     }
   });
