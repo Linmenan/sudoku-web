@@ -431,12 +431,18 @@ btnJoin.addEventListener('click', () => {
       }
     }
 
-    // 2. 幽灵数据清洗：剥夺原房主的星星标志，并强制清除原房主可能残留的焦点框
+    // 核心修复：立即强行卸载掉 Socket 上的旧 WebRTC 业务监听器（signal 和 relay-action），
+    // 避免在重新建立 P2P 物理连接的 1.5 秒缓冲期内，旧的回调函数还在并发响应导致串台或报状态错误。
+    socket.off('signal');
+    socket.off('relay-action');
+
+    // 2. 核心清洗：从玩家列表中【彻底物理删除】已经退出的老房主（即名字中包含 ⭐ 的旧用户数据），
+    // 同时清理焦点框。这样彻底杜绝了“幽灵玩家残留”和“双星共存”的界面崩坏现象！
     Object.keys(gameState.players).forEach(pId => {
-      if (gameState.players[pId].name.startsWith('⭐ ')) {
-        gameState.players[pId].name = gameState.players[pId].name.replace('⭐ ', '');
+      if (gameState.players[pId].name.includes('⭐')) {
+        delete gameState.players[pId];
+        delete gameState.focuses[pId];
       }
-      gameState.focuses[pId] = null;
     });
 
     const currentPwd = isPrivateCheck.checked ? passwordInput.value : null;
@@ -531,14 +537,17 @@ btnLeave.addEventListener('click', () => {
           }
         }
         console.log(`[Migration] 👑 房主主动退出，正在移交权限给玩家 Socket: ${newHostSocketId}`);
+        
+        // 核心修复：改用服务器安全Ack回调。只有当服务器明确回复“已接收迁移数据并转发”后，老房主才执行 reload 刷新。
+        // 这彻底消除了固定 300ms 盲目延迟导致的信令还没发完网络就断开的“随机卡死”惊悚 Bug！
         networkManager.socket.emit('migrate-host', {
           roomId: roomIdInput.value || 'test-room',
           newHostSocketId: newHostSocketId,
           gameState: store.getState()
+        }, () => {
+          console.log('[Migration] ✅ 房主迁移信令服务器已确认接收并转发，老房主现在安全退出...');
+          window.location.reload();
         });
-        
-        // 延迟一点刷新，确保移交信令成功发出
-        setTimeout(() => window.location.reload(), 300);
         return;
       }
     }

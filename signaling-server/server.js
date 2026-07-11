@@ -117,10 +117,13 @@ io.on('connection', (socket) => {
   });
 
   // 新增：房主迁移专属信令
-  socket.on('migrate-host', ({ roomId, newHostSocketId, gameState }) => {
+  socket.on('migrate-host', ({ roomId, newHostSocketId, gameState }, callback) => {
     console.log(`[Signaling] 🔄 房间 ${roomId} 正在进行房主迁移，新房主 Socket: ${newHostSocketId}`);
     // 广播给房间里剩下的所有玩家（原房主发完这个指令后就会断开）
     socket.to(roomId).emit('host-migrated', { newHostSocketId, gameState });
+    
+    // 核心修复：支持客户端传入的 Ack 回调函数，在推送完全量广播后立刻通知老房主，实现安全握手。
+    if (typeof callback === 'function') callback();
   });
 
   socket.on('disconnect', () => {
