@@ -97,6 +97,13 @@ io.on('connection', (socket) => {
     io.to(to).emit('relay-action', { from: socket.id, action });
   });
 
+  // 新增：房主迁移专属信令
+  socket.on('migrate-host', ({ roomId, newHostSocketId, gameState }) => {
+    console.log(`[Signaling] 🔄 房间 ${roomId} 正在进行房主迁移，新房主 Socket: ${newHostSocketId}`);
+    // 广播给房间里剩下的所有玩家（原房主发完这个指令后就会断开）
+    socket.to(roomId).emit('host-migrated', { newHostSocketId, gameState });
+  });
+
   socket.on('disconnect', () => {
     io.emit('player-disconnected', { socketId: socket.id, playerId: socket.playerId });
   });

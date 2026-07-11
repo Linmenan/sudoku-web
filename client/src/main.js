@@ -374,6 +374,33 @@ btnJoin.addEventListener('click', () => {
   
   console.log(`[Guest] 尝试加入房间... 房间号: ${roomId}, 昵称: ${nickname}`);
   const socket = createSocketConnection();
+
+  // 新增：监听房主迁移广播
+  socket.on('host-migrated', ({ newHostSocketId, gameState }) => {
+    console.log(`[Migration] 🔄 收到房主变更广播！新房主 Socket ID: ${newHostSocketId}`);
+    
+    // 1. 彻底切断旧的 WebRTC 物理连接，防止底层串台干扰
+    if (networkManager) {
+      if (networkManager.pc) networkManager.pc.close();
+      if (networkManager.channel) networkManager.channel.close();
+    }
+
+    if (socket.id === newHostSocketId) {
+      console.log(`[Migration] 👑 临危受命！我已被提拔为新房主！接管整个盘面...`);
+      // 同步最终盘面，防止房主退出时的微小数据差
+      store.setState(gameState);
+      store.dispatch({ type: 'ADD_PLAYER', payload: { id: localPlayerId, name: nickname, isHost: true } });
+      
+      // 华丽转身，重新实例化为房主网络管理器 (无缝继承原有的 TURN 凭证和固化身份)
+      networkManager = new HostPeerManager(roomId, socket, store, nickname, networkManager.iceConfig, localPlayerId);
+    } else {
+      console.log(`[Migration] 🔌 房主已易主，准备向新房主重新发起连接...`);
+      // 延迟 1.5 秒，给新房主创建 RTCPeerConnection 容器的缓冲时间
+      setTimeout(() => {
+        networkManager = new GuestPeerManager(roomId, socket, store, nickname, networkManager.iceConfig, localPlayerId);
+      }, 1500);
+    }
+  });
   
   socket.on('connect', () => {
     console.log(`[Guest] 开始校验房间状态...`);
@@ -416,6 +443,30 @@ btnJoin.addEventListener('click', () => {
 
 btnLeave.addEventListener('click', () => {
   if (confirm('确定要退出当前房间吗？')) {
+    // 房主迁移逻辑
+    if (networkManager && networkManager.peers) {
+      const peers = Object.keys(networkManager.peers);
+      if (peers.length > 0) {
+        // 挑选网络最好的玩家接盘（优先选择直连、没有走降级中继的玩家）
+        let newHostSocketId = peers[0];
+        for (const socketId of peers) {
+          if (!networkManager.peers[socketId].isRelayMode) {
+            newHostSocketId = socketId;
+            break;
+          }
+        }
+        console.log(`[Migration] 👑 房主主动退出，正在移交权限给玩家 Socket: ${newHostSocketId}`);
+        networkManager.socket.emit('migrate-host', {
+          roomId: roomIdInput.value || 'test-room',
+          newHostSocketId: newHostSocketId,
+          gameState: store.getState()
+        });
+        
+        // 延迟一点刷新，确保移交信令成功发出
+        setTimeout(() => window.location.reload(), 300);
+        return;
+      }
+    }
     window.location.reload(); 
   }
 });
