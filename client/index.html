@@ -94,9 +94,15 @@
     </div>
     
     <div class="network-panel" style="flex-direction: column; align-items: flex-start; gap: 10px;">
-      <div style="width: 100%; display: flex; flex-wrap: wrap; gap: 6px;">
+      <div style="width: 100%; display: flex; flex-wrap: wrap; gap: 6px; align-items: center;">
         <input type="text" id="nicknameInput" placeholder="你的昵称" style="width: 80px; padding: 4px;">
         <input type="text" id="roomIdInput" placeholder="输入房间号" style="width: 90px; padding: 4px;">
+        
+        <label style="display:flex; align-items:center; gap:2px; font-size:14px; cursor:pointer;">
+          <input type="checkbox" id="isPrivateCheck"> 私密
+        </label>
+        <input type="password" id="passwordInput" placeholder="房间密码" style="width: 70px; padding: 4px; display: none;">
+
         <button id="btnCreate" disabled>创建房间</button>
         <button id="btnJoin">加入房间</button>
         <button id="btnLeave">退出房间</button>

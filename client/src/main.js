@@ -24,6 +24,13 @@ const scoreBoard = document.getElementById('scoreBoard');
 
 const virtualKeyboard = document.getElementById('virtualKeyboard');
 const vkModeToggle = document.getElementById('vkModeToggle');
+const isPrivateCheck = document.getElementById('isPrivateCheck');
+const passwordInput = document.getElementById('passwordInput');
+
+// 绑定私密房间勾选框的显隐逻辑
+isPrivateCheck.addEventListener('change', (e) => {
+  passwordInput.style.display = e.target.checked ? 'inline-block' : 'none';
+});
 
 // 核心修改：生成并持久化本地的 UUID 作为永久身份凭证 (Session 固化)
 const getPersistentPlayerId = () => {
@@ -343,6 +350,12 @@ btnVerify.addEventListener('click', () => {
 btnCreate.addEventListener('click', () => {
   const roomId = roomIdInput.value || 'test-room';
   const nickname = nicknameInput.value || '房主';
+  const password = isPrivateCheck.checked ? passwordInput.value : null;
+
+  if (isPrivateCheck.checked && !password) {
+    alert('⚠️ 既然勾选了私密房间，请在旁边输入框中填写房间密码！');
+    return;
+  }
   
   console.log(`[Host] 正在创建房间... 房间号: ${roomId}, 昵称: ${nickname}`);
   const socket = createSocketConnection();
@@ -354,8 +367,8 @@ btnCreate.addEventListener('click', () => {
       store.dispatch({ type: 'LOCK_PUZZLE' }); 
       store.dispatch({ type: 'ADD_PLAYER', payload: { id: localPlayerId, name: nickname, isHost: true } });
       
-      // 将动态凭证和身份凭证一并注入底层
-      networkManager = new HostPeerManager(roomId, socket, store, nickname, { iceServers }, localPlayerId);
+      // 将动态凭证、身份凭证以及鉴权密码一并注入底层 (公开房 password 为 null)
+      networkManager = new HostPeerManager(roomId, socket, store, nickname, { iceServers }, localPlayerId, password);
       
       setupPanel.style.display = 'none';
       roomIdInput.disabled = true;
@@ -371,6 +384,7 @@ btnCreate.addEventListener('click', () => {
 btnJoin.addEventListener('click', () => {
   const roomId = roomIdInput.value || 'test-room';
   const nickname = nicknameInput.value || '玩家';
+  const password = isPrivateCheck.checked ? passwordInput.value : null;
   
   console.log(`[Guest] 尝试加入房间... 房间号: ${roomId}, 昵称: ${nickname}`);
   const socket = createSocketConnection();
@@ -404,13 +418,19 @@ btnJoin.addEventListener('click', () => {
   
   socket.on('connect', () => {
     console.log(`[Guest] 开始校验房间状态...`);
-    // 附带本地固化的 localPlayerId，以便服务器放行断线重连的合法身份
-    socket.emit('check-room', { roomId, nickname, playerId: localPlayerId }, (response) => {
+    // 附带本地固化的身份，并带上输入框中的密码进行鉴权请求
+    socket.emit('check-room', { roomId, nickname, playerId: localPlayerId, password }, (response) => {
       console.log(`[Guest] 收到的房间校验结果:`, response);
       
       if (!response.exists) {
         console.error(`[Guest] ❌ 房间校验失败: 房间不存在！`);
         alert('❌ 房间不存在或房主已离开，请检查房间号！');
+        socket.disconnect();
+        return;
+      }
+      if (response.authFailed) {
+        console.error(`[Guest] ❌ 房间鉴权失败: 密码错误或未提供密码！`);
+        alert('🔒 加入失败：房间密码错误，或该房间为私密房间！\n如果这是私密房间，请勾选"私密"并输入正确密码。');
         socket.disconnect();
         return;
       }

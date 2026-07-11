@@ -27,6 +27,9 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: '*' } });
 
+// 新增：用于存储房间的鉴权密码信息
+const roomAuthData = new Map(); 
+
 // 关键点：让 Node.js 直接提供前端的打包页面
 app.use(express.static(path.join(__dirname, '../client/dist')));
 
@@ -57,27 +60,43 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('create-room', ({ roomId, nickname }) => {
+  socket.on('create-room', ({ roomId, nickname, password }) => {
     socket.join(roomId);
     socket.nickname = nickname; 
+    
+    // 鉴权逻辑：如果明确传了 null 代表公开房间，传了 string 代表私密房间。
+    // 如果是 undefined (比如刚才写的房主断线迁移触发重新建房)，则保留原房间的密码状态！
+    if (password !== undefined) {
+      if (password === null) roomAuthData.delete(roomId);
+      else roomAuthData.set(roomId, password);
+    }
+    
     socket.emit('room-created', socket.id);
   });
 
-  socket.on('check-room', ({ roomId, nickname, playerId }, callback) => {
+  socket.on('check-room', ({ roomId, nickname, playerId, password }, callback) => {
     const room = io.sockets.adapter.rooms.get(roomId);
     if (room && room.size > 0) {
+      // 1. 拦截层：验证私密房间密码
+      if (roomAuthData.has(roomId)) {
+        const correctPassword = roomAuthData.get(roomId);
+        if (password !== correctPassword) {
+          return callback({ exists: true, authFailed: true }); // 密码验证失败直接打回
+        }
+      }
+
+      // 2. 拦截层：验证昵称冲突
       let isDuplicate = false;
       for (const socketId of room) {
         const s = io.sockets.sockets.get(socketId);
-        // 核心修改：允许相同 playerId 的玩家重连，拦截不同 playerId 却试图同名的恶意冒充
         if (s && s.nickname === nickname && s.playerId !== playerId) {
           isDuplicate = true;
           break;
         }
       }
-      callback({ exists: true, duplicate: isDuplicate });
+      callback({ exists: true, duplicate: isDuplicate, authFailed: false });
     } else {
-      callback({ exists: false, duplicate: false });
+      callback({ exists: false, duplicate: false, authFailed: false });
     }
   });
 
@@ -106,6 +125,14 @@ io.on('connection', (socket) => {
 
   socket.on('disconnect', () => {
     io.emit('player-disconnected', { socketId: socket.id, playerId: socket.playerId });
+    
+    // 垃圾回收：当没有玩家在房间时，清除该房间的密码缓存
+    for (const [roomId, pwd] of roomAuthData.entries()) {
+      const room = io.sockets.adapter.rooms.get(roomId);
+      if (!room || room.size === 0) {
+        roomAuthData.delete(roomId);
+      }
+    }
   });
 });
 

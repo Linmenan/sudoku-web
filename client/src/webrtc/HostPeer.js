@@ -12,13 +12,14 @@ export class HostPeerManager {
       { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
       { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' }
     ] 
-  }, hostPlayerId) { // 新增 hostPlayerId 参数
+  }, hostPlayerId, password) { // 新增 password 鉴权参数
     this.roomId = roomId;
     this.socket = socket;
     this.store = store;
     this.nickname = nickname;
     this.iceConfig = iceConfig;
     this.hostPlayerId = hostPlayerId;
+    this.password = password; // 可能为 null (公开), string (私密), 或 undefined (迁移时)
     this.peers = {};
 
     console.log(`[WebRTC-Host] 👑 房主网络管理器已启动，房间号: ${this.roomId}`);
@@ -26,7 +27,9 @@ export class HostPeerManager {
   }
 
   initSignaling() {
-    this.socket.emit('create-room', { roomId: this.roomId, nickname: this.nickname });
+    const payload = { roomId: this.roomId, nickname: this.nickname };
+    if (this.password !== undefined) payload.password = this.password;
+    this.socket.emit('create-room', payload);
 
     // 监听来自降级 Guest 的中继请求
     this.socket.on('relay-action', ({ from, action }) => {
