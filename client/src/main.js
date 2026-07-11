@@ -230,12 +230,22 @@ function renderBoard(state) {
     }
   }
 
+  // 新增：提取当前本地客户端玩家所聚焦的单元格数字（用于纯本地的高亮，不影响他人）
+  const localFocusedIndex = state.focuses[localPlayerId];
+  const highlightedNum = (localFocusedIndex !== undefined && localFocusedIndex !== null) ? state.board[localFocusedIndex] : null;
+
   const cells = document.querySelectorAll('.cell');
   cells.forEach((cell, index) => {
     let className = 'cell';
     if (index % 9 === 2 || index % 9 === 5) className += ' border-right-thick';
     if (Math.floor(index / 9) === 2 || Math.floor(index / 9) === 5) className += ' border-bottom-thick';
     if (state.locked[index]) className += ' locked';
+    
+    // 如果当前单元格内填写的数字与本地玩家正在聚焦的数字相同（排除空置格子），则挂载光效类名
+    if (highlightedNum !== null && state.board[index] === highlightedNum) {
+      className += ' number-highlight';
+    }
+    
     cell.className = className;
     
     let boxShadows = [];

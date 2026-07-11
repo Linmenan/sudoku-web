@@ -30,6 +30,13 @@
     .cell.border-bottom-thick { border-bottom: 3px solid #000 !important; }
     .cell.locked { color: #000; font-weight: bold; }
     
+    /* 新增：同数高亮特殊视觉光效样式（仅对当前本地玩家生效） */
+    .cell.number-highlight { 
+      background-color: #fff9c4 !important; /* 极其柔和的浅金底色 */
+      text-shadow: 0 0 8px #fbc02d, 0 0 12px #fbc02d; /* 字符轮廓金黄色特殊光效 */
+      font-weight: bold; 
+    }
+    
     /* 3x3 备注网格系统 */
     .notes-grid {
       display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr);
