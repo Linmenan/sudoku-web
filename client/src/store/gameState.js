@@ -101,10 +101,12 @@ export const createStore = (onStateChange = () => {}) => {
             
             state.players[id] = { 
               name: displayName, 
-              color: assignedColor 
+              color: assignedColor,
+              isOnline: true // 新增：标记玩家为在线状态
             };
           } else {
             state.players[id].name = displayName;
+            state.players[id].isOnline = true; // 新增：断线重连时恢复在线状态
           }
           break;
         }
@@ -112,6 +114,14 @@ export const createStore = (onStateChange = () => {}) => {
           const { id } = action.payload;
           delete state.players[id];
           delete state.focuses[id];
+          break;
+        }
+        case 'PLAYER_OFFLINE': {
+          const { id } = action.payload;
+          if (state.players[id]) {
+            state.players[id].isOnline = false; // 软删除：标记为离线
+          }
+          delete state.focuses[id]; // 物理清除其在棋盘上的焦点框
           break;
         }
       }

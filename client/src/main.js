@@ -277,6 +277,8 @@ const getRowColGrid = (index) => {
 function renderBoard(state) {
   playerListDiv.innerHTML = '';
   Object.values(state.players).forEach(player => {
+    if (player.isOnline === false) return; // 核心修复：不渲染已经离线的玩家标签
+    
     const tag = document.createElement('div');
     tag.className = 'player-tag';
     tag.style.backgroundColor = player.color;

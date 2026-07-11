@@ -156,9 +156,9 @@ export class HostPeerManager {
       if (this.peers[socketId]) {
         console.log(`[WebRTC-Host] 💔 玩家网络已断开: ${playerId} (Socket: ${socketId})`);
         
-        // 核心修改：绝对不删除玩家 (不触发 REMOVE_PLAYER)，实现 Session 固化！
-        // 仅清除该玩家在屏幕上的焦点框，完美保留其积分、格子占有权和个人分配颜色
-        this.store.dispatch({ type: 'UPDATE_FOCUS', payload: { index: null } }, playerId);
+        // 核心修改：绝对不物理删除玩家数据，实现 Session 固化！
+        // 将其标记为离线状态并清除屏幕焦点框，完美保留其积分、格子占有权和专属颜色
+        this.store.dispatch({ type: 'PLAYER_OFFLINE', payload: { id: playerId } });
         this.broadcast({ type: 'SYNC', payload: this.store.getState() });
         
         delete this.peers[socketId]; // 清理网络层的陈旧连接
