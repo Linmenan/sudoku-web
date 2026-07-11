@@ -89,10 +89,19 @@ export const createStore = (onStateChange = () => {}) => {
           const displayName = isHost ? `⭐ ${name}` : name;
           // 修复：如果玩家已存在，只更新名字（例如加星星），不重新计算并覆盖颜色
           if (!state.players[id]) {
-            const colorCount = Object.keys(state.players).length;
+            // 核心修复：动态分配未被使用的颜色，防止人员退出重进导致 length 变化而发生颜色撞车冲突
+            const usedColors = Object.values(state.players).map(p => p.color);
+            let assignedColor = PLAYER_COLORS.find(color => !usedColors.includes(color));
+            
+            // 兜底：如果房间人数超过了预设颜色池的上限（全部被占用），则回退使用人数取模方案
+            if (!assignedColor) {
+              const colorCount = Object.keys(state.players).length;
+              assignedColor = PLAYER_COLORS[colorCount % PLAYER_COLORS.length];
+            }
+            
             state.players[id] = { 
               name: displayName, 
-              color: PLAYER_COLORS[colorCount % PLAYER_COLORS.length] 
+              color: assignedColor 
             };
           } else {
             state.players[id].name = displayName;
