@@ -25,9 +25,19 @@ const scoreBoard = document.getElementById('scoreBoard');
 const virtualKeyboard = document.getElementById('virtualKeyboard');
 const vkModeToggle = document.getElementById('vkModeToggle');
 
+// 核心修改：生成并持久化本地的 UUID 作为永久身份凭证 (Session 固化)
+const getPersistentPlayerId = () => {
+  let id = localStorage.getItem('sudoku_player_id');
+  if (!id) {
+    id = 'player_' + Math.random().toString(36).substring(2, 10);
+    localStorage.setItem('sudoku_player_id', id);
+  }
+  return id;
+};
+
 let networkManager = null;
 let store = createStore(true, (s) => renderBoard(s)); 
-let localPlayerId = 'local';
+let localPlayerId = getPersistentPlayerId();
 let isNoteMode = false;
 
 function updateModeToggleUI() {
@@ -342,10 +352,10 @@ btnCreate.addEventListener('click', () => {
       console.log('[WebRTC] 🔑 云端下发的 ICE 凭证内容:', iceServers);
       
       store.dispatch({ type: 'LOCK_PUZZLE' }); 
-      store.dispatch({ type: 'ADD_PLAYER', payload: { id: 'local', name: nickname, isHost: true } });
+      store.dispatch({ type: 'ADD_PLAYER', payload: { id: localPlayerId, name: nickname, isHost: true } });
       
-      // 将动态凭证作为第五个参数注入底层
-      networkManager = new HostPeerManager(roomId, socket, store, nickname, { iceServers });
+      // 将动态凭证和身份凭证一并注入底层
+      networkManager = new HostPeerManager(roomId, socket, store, nickname, { iceServers }, localPlayerId);
       
       setupPanel.style.display = 'none';
       roomIdInput.disabled = true;
@@ -367,7 +377,8 @@ btnJoin.addEventListener('click', () => {
   
   socket.on('connect', () => {
     console.log(`[Guest] 开始校验房间状态...`);
-    socket.emit('check-room', { roomId, nickname }, (response) => {
+    // 附带本地固化的 localPlayerId，以便服务器放行断线重连的合法身份
+    socket.emit('check-room', { roomId, nickname, playerId: localPlayerId }, (response) => {
       console.log(`[Guest] 收到的房间校验结果:`, response);
       
       if (!response.exists) {
@@ -388,9 +399,8 @@ btnJoin.addEventListener('click', () => {
         console.log('[WebRTC] 🔑 云端下发的 ICE 凭证内容:', iceServers);
         
         store = createStore(false, (s) => renderBoard(s));
-        // 将动态凭证作为第五个参数注入底层
-        networkManager = new GuestPeerManager(roomId, socket, store, nickname, { iceServers }); 
-        localPlayerId = socket.id; 
+        // 核心修改：不再使用转瞬即逝的 socket.id，而是注入本地固化的 localPlayerId
+        networkManager = new GuestPeerManager(roomId, socket, store, nickname, { iceServers }, localPlayerId); 
         store.dispatch({ type: 'ADD_PLAYER', payload: { id: localPlayerId, name: nickname, isHost: false } });
   
         setupPanel.style.display = 'none';

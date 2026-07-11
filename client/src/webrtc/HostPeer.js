@@ -6,27 +6,20 @@ export class HostPeerManager {
     iceServers: [
       { urls: 'stun:stun.l.google.com:19302' },
       { urls: 'stun:stun1.l.google.com:19302' },
-      { urls: 'stun:stun.miwifi.com:3478' },       // 小米
-      { urls: 'stun:stun.qq.com:3478' },           // 腾讯
-      { urls: 'stun:stun.chat.bilibili.com:3478' }, // B站
-      {
-        urls: 'turn:openrelay.metered.ca:80',
-        username: 'openrelayproject',
-        credential: 'openrelayproject'
-      },
-      {
-        urls: 'turn:openrelay.metered.ca:443',
-        username: 'openrelayproject',
-        credential: 'openrelayproject'
-      }
+      { urls: 'stun:stun.miwifi.com:3478' },
+      { urls: 'stun:stun.qq.com:3478' },
+      { urls: 'stun:stun.chat.bilibili.com:3478' },
+      { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
+      { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' }
     ] 
-  }) {
+  }, hostPlayerId) { // 新增 hostPlayerId 参数
     this.roomId = roomId;
     this.socket = socket;
     this.store = store;
     this.nickname = nickname;
     this.iceConfig = iceConfig;
-    this.peers = {}; 
+    this.hostPlayerId = hostPlayerId;
+    this.peers = {};
 
     console.log(`[WebRTC-Host] 👑 房主网络管理器已启动，房间号: ${this.roomId}`);
     this.initSignaling();
@@ -43,46 +36,47 @@ export class HostPeerManager {
       }
     });
 
-    this.socket.on('player-joined', async ({ id: guestId, nickname }) => {
-      console.log(`[WebRTC-Host] 🔔 收到玩家加入通知! 玩家: ${nickname} (ID: ${guestId})`);
+    this.socket.on('player-joined', async ({ socketId, playerId, nickname }) => {
+      console.log(`[WebRTC-Host] 🔔 收到玩家加入通知! 玩家: ${nickname} (SocketID: ${socketId}, PlayerID: ${playerId})`);
       
-      this.store.dispatch({ type: 'ADD_PLAYER', payload: { id: guestId, name: nickname, isHost: false } });
+      // 核心修改：使用固化的业务身份 playerId，即使重连，之前 gameState 里的颜色和积分也会无缝继承！
+      this.store.dispatch({ type: 'ADD_PLAYER', payload: { id: playerId, name: nickname, isHost: false } });
       this.broadcast({ type: 'SYNC', payload: this.store.getState() });
       
       try {
         const pc = new RTCPeerConnection(this.iceConfig);
         console.log(`[WebRTC-Host] 🛠️ 已为玩家 ${nickname} 创建 RTCPeerConnection`);
         
-        const iceQueue = []; // 新增：为每个玩家独立创建一个 ICE 缓冲队列
+        const iceQueue = []; 
         
         pc.oniceconnectionstatechange = () => {
           console.log(`[WebRTC-Host] 📡 与玩家 ${nickname} 的底层连接状态改变为: ✨ ${pc.iceConnectionState} ✨`);
-          // 核心修复：同理增加对 disconnected 的捕获
           if (pc.iceConnectionState === 'failed' || pc.iceConnectionState === 'disconnected') {
             console.error(`[WebRTC-Host] ❌ 与玩家 ${nickname} 的 P2P 穿透中断或失败！直连已被阻断。`);
             
-            if (this.peers[guestId] && !this.peers[guestId].isRelayMode) {
+            if (this.peers[socketId] && !this.peers[socketId].isRelayMode) {
               console.warn(`[WebRTC-Host] 🛡️ 正在针对该玩家启用 WebSocket 服务器中继模式...`);
-              this.peers[guestId].isRelayMode = true;
-              // 关键操作：切换中继后，主动通过信令服务器全量推送一次盘面，拉齐数据状态
-              this.socket.emit('relay-action', { to: guestId, action: { type: 'SYNC', payload: this.store.getState() } });
+              this.peers[socketId].isRelayMode = true;
+              this.socket.emit('relay-action', { to: socketId, action: { type: 'SYNC', payload: this.store.getState() } });
             }
           }
         };
 
         const channel = pc.createDataChannel('game-data', { ordered: true });
         console.log(`[WebRTC-Host] 🛤️ 已创建 DataChannel 通道: game-data`);
-        this.setupChannel(guestId, channel, nickname);
+        
+        // 传入 playerId 以便在通道收到游戏操作时，精确分发到该身份
+        this.setupChannel(socketId, playerId, channel, nickname);
 
-        // 维护标志位 isRelayMode
-        this.peers[guestId] = { pc, channel, iceQueue, isRelayMode: false };
+        // 网络拓扑上依然用 socketId 寻找对应连接，但挂载真实 playerId
+        this.peers[socketId] = { pc, channel, iceQueue, isRelayMode: false, playerId };
 
         pc.onicecandidate = (event) => {
           if (event.candidate) {
             const type = event.candidate.type;
             console.log(`[WebRTC-Host] 🧊 探测到房主网络节点: [${type.toUpperCase()}] ${event.candidate.address}:${event.candidate.port}`);
             if (type === 'relay') console.log(`[WebRTC-Host] 💡 检测到云端 TURN 中继节点就绪，尝试辅助穿透...`);
-            this.socket.emit('signal', { to: guestId, data: { candidate: event.candidate } });
+            this.socket.emit('signal', { to: socketId, data: { candidate: event.candidate } });
           }
         };
 
@@ -90,7 +84,7 @@ export class HostPeerManager {
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
         console.log(`[WebRTC-Host] 📤 Offer 生成完毕并设置为本地描述，正在发送给玩家 ${nickname}...`);
-        this.socket.emit('signal', { to: guestId, data: { sdp: pc.localDescription } });
+        this.socket.emit('signal', { to: socketId, data: { sdp: pc.localDescription } });
 
       } catch (err) {
         console.error(`[WebRTC-Host] ❌ 初始化玩家连接时发生严重错误:`, err);
@@ -130,17 +124,21 @@ export class HostPeerManager {
       }
     });
 
-    this.socket.on('player-disconnected', (guestId) => {
-      if (this.peers[guestId]) {
-        console.log(`[WebRTC-Host] 💔 玩家已断开连接: ${guestId}`);
-        this.store.dispatch({ type: 'REMOVE_PLAYER', payload: { id: guestId } });
+    this.socket.on('player-disconnected', ({ socketId, playerId }) => {
+      if (this.peers[socketId]) {
+        console.log(`[WebRTC-Host] 💔 玩家网络已断开: ${playerId} (Socket: ${socketId})`);
+        
+        // 核心修改：绝对不删除玩家 (不触发 REMOVE_PLAYER)，实现 Session 固化！
+        // 仅清除该玩家在屏幕上的焦点框，完美保留其积分、格子占有权和个人分配颜色
+        this.store.dispatch({ type: 'UPDATE_FOCUS', payload: { index: null } }, playerId);
         this.broadcast({ type: 'SYNC', payload: this.store.getState() });
-        delete this.peers[guestId];
+        
+        delete this.peers[socketId]; // 清理网络层的陈旧连接
       }
     });
   }
 
-  setupChannel(guestId, channel, nickname) {
+  setupChannel(socketId, playerId, channel, nickname) {
     channel.onopen = () => {
       console.log(`[WebRTC-Host] 🎉 与玩家 ${nickname} 的数据通道已成功开启！马上同步初始盘面。`);
       channel.send(JSON.stringify({ type: 'SYNC', payload: this.store.getState() }));
@@ -151,7 +149,8 @@ export class HostPeerManager {
 
     channel.onmessage = (event) => {
       const action = JSON.parse(event.data);
-      const updatedState = this.store.dispatch(action, guestId);
+      // 核心：使用 playerId 代替原本转瞬即逝的 socketId 进行业务操作分发
+      const updatedState = this.store.dispatch(action, playerId);
       this.broadcast({ type: 'SYNC', payload: updatedState });
     };
   }

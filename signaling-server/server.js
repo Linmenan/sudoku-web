@@ -63,13 +63,14 @@ io.on('connection', (socket) => {
     socket.emit('room-created', socket.id);
   });
 
-  socket.on('check-room', ({ roomId, nickname }, callback) => {
+  socket.on('check-room', ({ roomId, nickname, playerId }, callback) => {
     const room = io.sockets.adapter.rooms.get(roomId);
     if (room && room.size > 0) {
       let isDuplicate = false;
       for (const socketId of room) {
         const s = io.sockets.sockets.get(socketId);
-        if (s && s.nickname === nickname) {
+        // 核心修改：允许相同 playerId 的玩家重连，拦截不同 playerId 却试图同名的恶意冒充
+        if (s && s.nickname === nickname && s.playerId !== playerId) {
           isDuplicate = true;
           break;
         }
@@ -80,10 +81,11 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('join-room', ({ roomId, nickname }) => {
+  socket.on('join-room', ({ roomId, nickname, playerId }) => {
     socket.join(roomId);
     socket.nickname = nickname; 
-    socket.to(roomId).emit('player-joined', { id: socket.id, nickname });
+    socket.playerId = playerId; // 在底层 Socket 上绑定真实的业务身份
+    socket.to(roomId).emit('player-joined', { socketId: socket.id, playerId, nickname });
   });
 
   socket.on('signal', ({ to, targetId, data }) => {
@@ -96,7 +98,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('disconnect', () => {
-    io.emit('player-disconnected', socket.id);
+    io.emit('player-disconnected', { socketId: socket.id, playerId: socket.playerId });
   });
 });
 

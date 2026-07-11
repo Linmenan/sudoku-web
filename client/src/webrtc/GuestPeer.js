@@ -6,26 +6,19 @@ export class GuestPeerManager {
     iceServers: [
       { urls: 'stun:stun.l.google.com:19302' },
       { urls: 'stun:stun1.l.google.com:19302' },
-      { urls: 'stun:stun.miwifi.com:3478' },       // 小米
-      { urls: 'stun:stun.qq.com:3478' },           // 腾讯
-      { urls: 'stun:stun.chat.bilibili.com:3478' }, // B站
-      {
-        urls: 'turn:openrelay.metered.ca:80',
-        username: 'openrelayproject',
-        credential: 'openrelayproject'
-      },
-      {
-        urls: 'turn:openrelay.metered.ca:443',
-        username: 'openrelayproject',
-        credential: 'openrelayproject'
-      }
+      { urls: 'stun:stun.miwifi.com:3478' },
+      { urls: 'stun:stun.qq.com:3478' },
+      { urls: 'stun:stun.chat.bilibili.com:3478' },
+      { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
+      { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' }
     ] 
-  }) {
+  }, playerId) { // 新增 playerId
     this.roomId = roomId;
     this.socket = socket;
     this.store = store;
     this.nickname = nickname; 
     this.iceConfig = iceConfig;
+    this.playerId = playerId; // 绑定固化身份
     this.pc = new RTCPeerConnection(this.iceConfig);
     this.channel = null;
     this.hostId = null;
@@ -50,7 +43,8 @@ export class GuestPeerManager {
 
   initSignaling() {
     console.log(`[WebRTC-Guest] 📣 向信令服务器发送 join-room 请求...`);
-    this.socket.emit('join-room', { roomId: this.roomId, nickname: this.nickname });
+    // 在信令握手时携带固化身份 playerId
+    this.socket.emit('join-room', { roomId: this.roomId, nickname: this.nickname, playerId: this.playerId });
     this.iceQueue = []; // 新增：ICE 候选者缓冲队列
 
     // 监听中继信道，当打洞失败时使用
