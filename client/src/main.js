@@ -95,9 +95,16 @@ function handleInput(key) {
   
   if (!isValidNum && !isDelete) return;
 
-  if (isNoteMode && isValidNum) {
-    executeAction({ type: 'TOGGLE_NOTE', payload: { index: focusedIndex, value: num } });
+  if (isNoteMode) {
+    if (isValidNum) {
+      // 备注模式下：如果输入数字，利用底层的 Toggle 机制，已存在则物理删除，不存在则添加
+      executeAction({ type: 'TOGGLE_NOTE', payload: { index: focusedIndex, value: num } });
+    } else if (isDelete) {
+      // 备注模式下：按删除键仅物理清空该格子的所有备注
+      executeAction({ type: 'CLEAR_CELL_NOTES', payload: { index: focusedIndex } });
+    }
   } else {
+    // 正常模式（大数字填入模式）
     const valToFill = isDelete ? null : num;
     const oldVal = state.board[focusedIndex];
     executeAction({ type: 'FILL_NUM', payload: { index: focusedIndex, value: valToFill } });

@@ -60,6 +60,14 @@ export const createStore = (isHost = false, onStateChange = () => {}) => {
             : [...noteArr, value].sort();
           break;
         }
+        case 'CLEAR_CELL_NOTES': {
+          const { index } = action.payload;
+          // 只有在没有大数字的情况下，才允许清空其底层维护的备注数组
+          if (state.board[index] === null) {
+            state.notes[index] = [];
+          }
+          break;
+        }
         case 'UPDATE_FOCUS': {
           const { index } = action.payload;
           if (index === null) {
