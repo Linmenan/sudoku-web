@@ -2,7 +2,7 @@
  * @Author: yanyu yanyu1@xcmg.com
  * @Date: 2026-07-09 09:12:09
  * @LastEditors: yanyu yanyu1@xcmg.com
- * @LastEditTime: 2026-07-11 14:12:31
+ * @LastEditTime: 2026-07-11 14:46:26
  * @FilePath: /sudoku-webrtc/signaling-server/server.js
  * @Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
  */
@@ -34,13 +34,26 @@ io.on('connection', (socket) => {
   // 新增：给前端下发 Twilio 动态 TURN 穿透凭证的接口
   socket.on('get-turn-credentials', async (callback) => {
     try {
-      // 核心修改：退回使用基础账户授权
       const client = twilio(TWILIO_SID, TWILIO_TOKEN);
       const token = await client.tokens.create();
-      callback(token.iceServers); // 返回包含了动态账密的专属打洞节点数组
+      callback(token.iceServers); 
     } catch (err) {
-      console.error('获取 Twilio TURN 凭证失败:', err);
-      callback([{ urls: 'stun:stun.miwifi.com:3478' }, { urls: 'stun:stun.qq.com:3478' }]); // 降级方案
+      console.error('获取 Twilio TURN 凭证失败:', err.message);
+      // 增强降级方案：补充免费的公共 TURN 服务器，即使 Twilio 挂了也能尝试物理中继
+      callback([
+        { urls: 'stun:stun.miwifi.com:3478' }, 
+        { urls: 'stun:stun.qq.com:3478' },
+        {
+          urls: 'turn:openrelay.metered.ca:80',
+          username: 'openrelayproject',
+          credential: 'openrelayproject'
+        },
+        {
+          urls: 'turn:openrelay.metered.ca:443',
+          username: 'openrelayproject',
+          credential: 'openrelayproject'
+        }
+      ]); 
     }
   });
 

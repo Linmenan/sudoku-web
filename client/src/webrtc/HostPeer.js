@@ -57,11 +57,12 @@ export class HostPeerManager {
         
         pc.oniceconnectionstatechange = () => {
           console.log(`[WebRTC-Host] 📡 与玩家 ${nickname} 的底层连接状态改变为: ✨ ${pc.iceConnectionState} ✨`);
-          if (pc.iceConnectionState === 'failed') {
-            console.error(`[WebRTC-Host] ❌ 与玩家 ${nickname} 的 P2P 穿透失败！检测到高难度 NAT，直连已被阻断。`);
-            console.warn(`[WebRTC-Host] 🛡️ 正在针对该玩家启用 WebSocket 服务器中继模式...`);
+          // 核心修复：同理增加对 disconnected 的捕获
+          if (pc.iceConnectionState === 'failed' || pc.iceConnectionState === 'disconnected') {
+            console.error(`[WebRTC-Host] ❌ 与玩家 ${nickname} 的 P2P 穿透中断或失败！直连已被阻断。`);
             
-            if (this.peers[guestId]) {
+            if (this.peers[guestId] && !this.peers[guestId].isRelayMode) {
+              console.warn(`[WebRTC-Host] 🛡️ 正在针对该玩家启用 WebSocket 服务器中继模式...`);
               this.peers[guestId].isRelayMode = true;
               // 关键操作：切换中继后，主动通过信令服务器全量推送一次盘面，拉齐数据状态
               this.socket.emit('relay-action', { to: guestId, action: { type: 'SYNC', payload: this.store.getState() } });

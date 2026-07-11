@@ -35,10 +35,13 @@ export class GuestPeerManager {
     
     this.pc.oniceconnectionstatechange = () => {
       console.log(`[WebRTC-Guest] 📡 底层 P2P 连接状态改变为: ✨ ${this.pc.iceConnectionState} ✨`);
-      if (this.pc.iceConnectionState === 'failed') {
-        console.error(`[WebRTC-Guest] ❌ P2P 直连打洞失败！检测到极高难度 NAT (很可能为对称型 NAT) 阻断连接。`);
-        console.warn(`[WebRTC-Guest] 🛡️ 启动备用预案：正在自动降级为 WebSocket 服务器中继模式...`);
-        this.isRelayMode = true;
+      // 核心修复：增加对 disconnected 的捕获。很多网络环境下，打洞失败会长时间卡在 disconnected 而不触发 failed
+      if (this.pc.iceConnectionState === 'failed' || this.pc.iceConnectionState === 'disconnected') {
+        console.error(`[WebRTC-Guest] ❌ P2P 直连断开或打洞失败！极高难度 NAT 阻断了连接。`);
+        if (!this.isRelayMode) {
+          console.warn(`[WebRTC-Guest] 🛡️ 启动备用预案：正在自动无缝降级为 WebSocket 服务器中继模式...`);
+          this.isRelayMode = true;
+        }
       }
     };
 
