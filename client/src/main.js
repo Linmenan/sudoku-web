@@ -5,7 +5,7 @@ import { io } from 'socket.io-client';
 import { createStore } from './store/gameState.js';
 import { HostPeerManager } from './webrtc/HostPeer.js';
 import { GuestPeerManager } from './webrtc/GuestPeer.js';
-import { countSolutions, isBoardSolved } from './sudoku/solver.js';
+import { countSolutions, isBoardSolved, generateSudoku } from './sudoku/solver.js';
 
 const boardDiv = document.getElementById('board');
 const roomIdInput = document.getElementById('roomIdInput');
@@ -27,6 +27,8 @@ const vkModeToggle = document.getElementById('vkModeToggle');
 const isPrivateCheck = document.getElementById('isPrivateCheck');
 const passwordInput = document.getElementById('passwordInput');
 const debugModeCheck = document.getElementById('debugModeCheck');
+const btnGenerate = document.getElementById('btnGenerate');
+const difficultySelect = document.getElementById('difficultySelect');
 
 // 绑定快速 Debug 模式开关逻辑
 debugModeCheck.addEventListener('change', (e) => {
@@ -265,6 +267,28 @@ btnClear.addEventListener('click', () => {
       btnCreate.disabled = true;
     }
   }
+});
+
+btnGenerate.addEventListener('click', () => {
+  btnGenerate.disabled = true;
+  const originalText = btnGenerate.innerText;
+  btnGenerate.innerText = '⏳ 生成中...';
+  statusText.innerText = '正在使用算法挖掘并验证解题路径，请稍候...';
+  statusText.style.color = '#1565c0';
+  
+  // 利用 setTimeout 剥离渲染线程，确保按钮变成“生成中”后，再执行耗时的随机演算
+  setTimeout(() => {
+    const difficulty = difficultySelect.value;
+    const newBoard = generateSudoku(difficulty);
+    
+    executeAction({ type: 'SET_BOARD', payload: { newBoard } });
+    
+    btnGenerate.innerText = originalText;
+    btnGenerate.disabled = false;
+    
+    // 生成完成后自动触发一次盘面校验机制，以此唤醒“创建房间”按钮
+    btnVerify.click();
+  }, 50);
 });
 
 const getRowColGrid = (index) => {

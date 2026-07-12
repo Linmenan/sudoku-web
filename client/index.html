@@ -23,8 +23,20 @@
     .mode-toggle { display: flex; align-items: center; gap: 5px; font-weight: bold; cursor: pointer; padding: 5px 10px; background: #e0e0e0; border-radius: 4px; user-select: none;}
     .mode-toggle.active { background: #ffeb3b; color: #f57f17; border: 1px solid #fbc02d;}
 
-    #board { display: grid; grid-template-columns: repeat(9, 45px); background: #000; border: 3px solid #000; gap: 1px; width: max-content; }
-    .cell { width: 45px; height: 45px; background: white; display: flex; align-items: center; justify-content: center; font-size: 24px; cursor: pointer; user-select: none; color: #1976d2; box-sizing: border-box; position: relative;}
+    /* 引入 CSS 变量与响应式媒体查询，确保小屏幕棋盘不溢出 */
+    :root {
+      --cell-size: 45px;
+    }
+    @media (max-width: 450px) {
+      :root {
+        --cell-size: 10.2vw; /* 小屏幕下棋盘按屏幕宽度自动等比缩放 */
+      }
+      .cell { font-size: 6vw !important; }
+      .notes-grid { transform: scale(0.85); }
+    }
+    
+    #board { display: grid; grid-template-columns: repeat(9, var(--cell-size)); background: #000; border: 3px solid #000; gap: 1px; width: max-content; margin: 0 auto; }
+    .cell { width: var(--cell-size); height: var(--cell-size); background: white; display: flex; align-items: center; justify-content: center; font-size: 24px; cursor: pointer; user-select: none; color: #1976d2; box-sizing: border-box; position: relative;}
     
     .cell.border-right-thick { border-right: 3px solid #000 !important; }
     .cell.border-bottom-thick { border-bottom: 3px solid #000 !important; }
@@ -57,25 +69,31 @@
     .score-item { display: flex; justify-content: space-between; margin: 10px 0; font-size: 18px; font-weight: bold;}
     #btnLeave { background: #f44336; color: white; border: none; padding: 5px 15px; border-radius: 4px; cursor: pointer; margin-left: 10px; display: none;}
   
-    /* 虚拟键盘样式 */
+    /* 虚拟键盘样式：三排紧凑布局优化版 */
     #virtualKeyboard {
-      display: none; grid-template-columns: repeat(6, 1fr); gap: 6px;
-      position: fixed; bottom: 15px; left: 50%; transform: translateX(-50%);
-      width: 96%; max-width: 450px; background: rgba(255,255,255,0.95);
-      padding: 12px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+      display: none; grid-template-columns: repeat(5, 1fr); gap: 5px;
+      position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%);
+      width: 98%; max-width: 450px; background: rgba(255,255,255,0.95);
+      padding: 8px; border-radius: 10px; box-shadow: 0 4px 20px rgba(0,0,0,0.2);
       z-index: 1000; box-sizing: border-box; backdrop-filter: blur(5px);
     }
     .vk-key {
-      background: #fff; border: 1px solid #ddd; border-radius: 8px;
-      padding: 15px 0; font-size: 20px; font-weight: bold; color: #333;
+      background: #fff; border: 1px solid #ddd; border-radius: 6px;
+      padding: 10px 0; font-size: 18px; font-weight: bold; color: #333;
       text-align: center; cursor: pointer; user-select: none;
       box-shadow: 0 2px 0 #ccc; transition: all 0.1s;
+      order: 1; /* 默认数字键排在最前面 */
     }
     .vk-key:active { transform: translateY(2px); box-shadow: 0 0 0 transparent; }
-    .vk-key.vk-wide { grid-column: span 2; font-size: 16px; }
-    .vk-key.vk-mode { background: #e0e0e0; color: #333; border-color: #bbb; box-shadow: 0 2px 0 #999; }
+    
+    /* 巧妙利用 order 属性与 grid-column 实现: 
+       第一排: 1 2 3 4 5
+       第二排: 6 7 8 9 [删除]
+       第三排: [备注模式切换] */
+    .vk-key.vk-wide { font-size: 15px; }
+    .vk-key.vk-delete { order: 2; grid-column: span 1; color: #d32f2f; }
+    .vk-key.vk-mode { order: 3; grid-column: span 5; padding: 12px 0; background: #e0e0e0; color: #333; border-color: #bbb; box-shadow: 0 2px 0 #999; }
     .vk-key.vk-mode.active { background: #ffeb3b; color: #f57f17; border-color: #fbc02d; box-shadow: 0 2px 0 #f9a825; }
-    .vk-key.vk-delete { color: #d32f2f; }
 
     /* 滑动开关 (Toggle Switch) 样式 */
     .switch { position: relative; display: inline-block; width: 40px; height: 20px; }
@@ -97,6 +115,15 @@
     <div class="setup-panel" id="setupPanel">
       <div style="margin-bottom: 10px;">阶段：出题模式 (请点击下方格子并用键盘 1-9 填入数字)</div>
       
+      <div style="margin-bottom: 10px; display: flex; align-items: center; gap: 8px;">
+        <select id="difficultySelect" style="padding: 4px; border-radius: 4px; border: 1px solid #ccc; font-size: 14px;">
+          <option value="easy">简单</option>
+          <option value="medium" selected>中等</option>
+          <option value="hard">困难</option>
+        </select>
+        <button id="btnGenerate" style="cursor: pointer;">🎲 随机生成谜题</button>
+      </div>
+
       <div style="margin-bottom: 10px; display: flex; align-items: center; font-size: 14px;">
         <label class="switch">
           <input type="checkbox" id="debugModeCheck">

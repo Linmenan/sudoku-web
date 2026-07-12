@@ -84,6 +84,15 @@ export const createStore = (onStateChange = () => {}) => {
           }
           break;
         }
+        case 'SET_BOARD': {
+          // 用于批量将算法生成的题目载入状态
+          if (state.phase === 'SETUP') {
+            const { newBoard } = action.payload;
+            state.board = [...newBoard];
+            state.notes.forEach(note => note.length = 0);
+          }
+          break;
+        }
         case 'ADD_PLAYER': {
           const { id, name, isHost } = action.payload;
           const displayName = isHost ? `⭐ ${name}` : name;

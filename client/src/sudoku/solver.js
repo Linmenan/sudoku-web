@@ -99,3 +99,71 @@ export function isBoardSolved(boardArr) {
   }
   return true;
 }
+
+/**
+ * 随机生成数独谜题
+ * @param {string} difficulty 'easy', 'medium', 'hard'
+ * @returns {Array} 长度为 81 的一维数组
+ */
+export function generateSudoku(difficulty) {
+  let board = Array(81).fill(null);
+
+  // 内部验证函数（基于一维数组）
+  function isValidForGen(r, c, val) {
+    for (let i = 0; i < 9; i++) {
+      if (board[r * 9 + i] === val || board[i * 9 + c] === val) return false;
+    }
+    let startRow = Math.floor(r / 3) * 3;
+    let startCol = Math.floor(c / 3) * 3;
+    for (let i = 0; i < 3; i++) {
+      for (let j = 0; j < 3; j++) {
+        if (board[(startRow + i) * 9 + (startCol + j)] === val) return false;
+      }
+    }
+    return true;
+  }
+
+  // 深度优先回溯填充一个完整的合法终盘
+  function fillBoard(index) {
+    if (index === 81) return true;
+    let r = Math.floor(index / 9);
+    let c = index % 9;
+    
+    // 随机打乱 1-9 的尝试顺序，保证每次生成的终盘都不同
+    let nums = [1, 2, 3, 4, 5, 6, 7, 8, 9].sort(() => Math.random() - 0.5);
+    for (let v of nums) {
+      if (isValidForGen(r, c, v)) {
+        board[index] = v;
+        if (fillBoard(index + 1)) return true;
+        board[index] = null;
+      }
+    }
+    return false;
+  }
+
+  // 1. 生成完整合法终盘
+  fillBoard(0);
+
+  // 2. 根据难度确定需要挖空的格子数量
+  let removeCount = 45; // 中等
+  if (difficulty === 'easy') removeCount = 35;
+  if (difficulty === 'hard') removeCount = 55;
+
+  // 3. 随机挖空并验证唯一解
+  let indices = Array.from({ length: 81 }, (_, i) => i).sort(() => Math.random() - 0.5);
+  for (let i of indices) {
+    if (removeCount <= 0) break;
+    
+    let temp = board[i];
+    board[i] = null; // 尝试挖空
+    
+    // 验证挖空后是否有唯一解
+    if (countSolutions(board) !== 1) {
+      board[i] = temp; // 出现多解，说明该线索不可省略，将其恢复
+    } else {
+      removeCount--; // 成功挖空且保证唯一解
+    }
+  }
+  
+  return board;
+}
