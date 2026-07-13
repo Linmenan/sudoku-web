@@ -12,6 +12,7 @@ export const createStore = (onStateChange = () => {}) => {
     focuses: {},
     players: {},
     cellOwners: Array(81).fill(null),
+    chatMessages: [], // 新增：保存房间聊天记录
   };
 
   const getRowColGrid = (index) => {
@@ -131,6 +132,21 @@ export const createStore = (onStateChange = () => {}) => {
             state.players[id].isOnline = false; // 软删除：标记为离线
           }
           delete state.focuses[id]; // 物理清除其在棋盘上的焦点框
+          break;
+        }
+        case 'SEND_CHAT': {
+          const { id, text } = action.payload;
+          if (state.players[id] && text.trim()) {
+            state.chatMessages.push({
+              playerId: id,
+              text: text.trim().substring(0, 50),
+              id: Math.random().toString(36).substr(2, 9) // 唯一标识符，方便前端查重渲染
+            });
+            // 限制最大消息数，防止内存泄漏和同步包过大
+            if (state.chatMessages.length > 50) {
+              state.chatMessages.shift();
+            }
+          }
           break;
         }
       }

@@ -22,6 +22,11 @@ const btnLeave = document.getElementById('btnLeave');
 const winModal = document.getElementById('winModal');
 const scoreBoard = document.getElementById('scoreBoard');
 
+const chatPanel = document.getElementById('chatPanel');
+const chatMessagesDiv = document.getElementById('chatMessages');
+const chatInput = document.getElementById('chatInput');
+const btnSendChat = document.getElementById('btnSendChat');
+
 const virtualKeyboard = document.getElementById('virtualKeyboard');
 const vkModeToggle = document.getElementById('vkModeToggle');
 const isPrivateCheck = document.getElementById('isPrivateCheck');
@@ -29,6 +34,22 @@ const passwordInput = document.getElementById('passwordInput');
 const debugModeCheck = document.getElementById('debugModeCheck');
 const btnGenerate = document.getElementById('btnGenerate');
 const difficultySelect = document.getElementById('difficultySelect');
+
+// 绑定发送聊天逻辑
+const sendChatMessage = () => {
+  const text = chatInput.value.trim();
+  if (!text) return;
+  executeAction({ type: 'SEND_CHAT', payload: { id: localPlayerId, text } });
+  chatInput.value = ''; // 发送后清空输入框
+};
+
+btnSendChat.addEventListener('click', sendChatMessage);
+chatInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    sendChatMessage();
+  }
+});
 
 // 绑定快速 Debug 模式开关逻辑
 debugModeCheck.addEventListener('change', (e) => {
@@ -371,6 +392,41 @@ function renderBoard(state) {
   if (virtualKeyboard) {
     const hasFocus = state.focuses[localPlayerId] !== null && state.focuses[localPlayerId] !== undefined;
     virtualKeyboard.style.display = hasFocus ? 'grid' : 'none';
+  }
+
+  // 渲染公屏聊天区域
+  if (state.phase === 'PLAYING') {
+    chatPanel.style.display = 'flex';
+    
+    // XSS 恶意脚本注入防护
+    const escapeHTML = (str) => str.replace(/[&<>'"]/g, tag => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
+    }[tag]));
+
+    // 智能差异化更新：比对最后一条消息的 ID 以决定是否需要更新 DOM（避免因点击九宫格频繁刷新导致聊天框诡异跳动）
+    const currentLastMsg = state.chatMessages.length > 0 ? state.chatMessages[state.chatMessages.length - 1] : null;
+    const renderedLastMsgId = chatMessagesDiv.dataset.lastMsgId;
+
+    if (currentLastMsg && currentLastMsg.id !== renderedLastMsgId) {
+      chatMessagesDiv.innerHTML = '';
+      state.chatMessages.forEach(msg => {
+        const p = state.players[msg.playerId];
+        if (!p) return;
+        const msgDiv = document.createElement('div');
+        msgDiv.className = 'chat-msg';
+        // 动态继承该玩家在游戏内分配好的独特颜色
+        msgDiv.innerHTML = `<span class="chat-name" style="color: ${p.color}">${p.name}:</span><span>${escapeHTML(msg.text)}</span>`;
+        chatMessagesDiv.appendChild(msgDiv);
+      });
+      chatMessagesDiv.dataset.lastMsgId = currentLastMsg.id;
+      // 收到新消息时，自动将滚动条拽到最底部
+      chatMessagesDiv.scrollTop = chatMessagesDiv.scrollHeight;
+    } else if (state.chatMessages.length === 0) {
+      chatMessagesDiv.innerHTML = '';
+      chatMessagesDiv.dataset.lastMsgId = '';
+    }
+  } else {
+    chatPanel.style.display = 'none'; // 房主还在出题模式时隐藏
   }
 }
 
