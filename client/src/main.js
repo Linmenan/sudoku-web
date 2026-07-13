@@ -438,6 +438,15 @@ btnCreate.addEventListener('click', () => {
   const socket = createSocketConnection();
   
   socket.on('connect', () => {
+    // 核心修复：拦截断线重连！如果 networkManager 已存在，说明是切屏/后台唤醒导致的 Socket 重连
+    if (networkManager) {
+      console.log('[Host] 🔄 Socket 断线重连成功，重新在服务器上注册房间...');
+      const payload = { roomId, nickname };
+      if (password !== undefined) payload.password = password;
+      socket.emit('create-room', payload);
+      return; // 提前中止，绝对不能再次触发 LOCK_PUZZLE，否则会把玩家填的数字全部变成题面死锁！
+    }
+
     socket.emit('get-turn-credentials', (iceServers) => {
       console.log('[WebRTC] 🔑 云端下发的 ICE 凭证内容:', iceServers);
       
@@ -517,6 +526,13 @@ btnJoin.addEventListener('click', () => {
   });
   
   socket.on('connect', () => {
+    // 核心修复：拦截断线重连！如果 networkManager 已存在，说明是后台唤醒导致的重连
+    if (networkManager) {
+      console.log('[Guest] 🔄 Socket 断线重连成功，重新向服务器申请加入房间...');
+      socket.emit('join-room', { roomId, nickname, playerId: localPlayerId });
+      return; // 提前中止，防止重新初始化导致本地棋盘和状态被异常覆盖或卡死
+    }
+
     console.log(`[Guest] 开始校验房间状态...`);
     // 附带本地固化的身份，并带上输入框中的密码进行鉴权请求
     socket.emit('check-room', { roomId, nickname, playerId: localPlayerId, password }, (response) => {
