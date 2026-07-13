@@ -12,6 +12,8 @@ const btnClear = document.getElementById('btnClear');
 const statusText = document.getElementById('statusText');
 const setupPanel = document.getElementById('setupPanel');
 const playerListDiv = document.getElementById('playerList');
+const mainTitle = document.getElementById('mainTitle');
+const nicknameArea = document.getElementById('nicknameArea');
 const modeToggle = document.getElementById('modeToggle');
 const nicknameInput = document.getElementById('nicknameInput');
 const btnLeave = document.getElementById('btnLeave');
@@ -318,6 +320,9 @@ function showRoomInfoUI(roomId, nickname, password, isHost) {
   infoDiv.innerHTML = `<div><strong>${role}:</strong> ${nickname} &nbsp;|&nbsp; <strong>房间:</strong> ${roomId} &nbsp;|&nbsp; ${pwdText}</div>`;
   
   statusText.style.display = 'none'; // 隐藏首页提示信息框
+  if (mainTitle) mainTitle.style.display = 'none'; // 隐藏主标题
+  if (nicknameArea) nicknameArea.style.display = 'none'; // 隐藏设置昵称控件
+  
   btnLeave.style.display = 'inline-block';
   if (isHost) btnLeave.innerText = '解散房间';
 }
