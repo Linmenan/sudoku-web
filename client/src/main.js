@@ -77,6 +77,24 @@ socket.on('rooms-updated', (rooms) => {
   renderActiveRoomsTable(rooms);
 });
 
+// 新增：被动房主接管（解决老房主网络异常断开、死机、拔网线，没发交接信令就蒸发的问题）
+socket.on('player-disconnected', ({ socketId, playerId }) => {
+  const state = store.getState();
+  const droppedPlayer = state.players[playerId];
+  // 探测到掉线玩家是房主，且我自己目前是普通玩家
+  if (droppedPlayer && droppedPlayer.name.includes('⭐') && networkManager instanceof GuestPeerManager) {
+    if (confirm(`🚨 监测到房主 [${droppedPlayer.name}] 意外掉线！\n网络已失去主节点，对局随时可能中断。\n\n是否由您挺身而出接管房间，成为新房主？`)) {
+      console.log(`[Migration] 👑 玩家主动接管断线房间，变身新房主！`);
+      store.dispatch({ type: 'ADD_PLAYER', payload: { id: localPlayerId, name: currentNickname, isHost: true } });
+      
+      if (networkManager.pc) networkManager.pc.close();
+      // 无缝转职为 Host，携带原有的房间状态继续充当主服务器
+      networkManager = new HostPeerManager(currentRoomId, socket, store, currentNickname, networkManager.iceConfig, localPlayerId, currentPassword);
+      showRoomInfoUI(currentRoomId, currentNickname, currentPassword, true);
+    }
+  }
+});
+
 socket.on('connect', () => {
   console.log('[Socket] ✅ 已成功锚定到信令服务器！ID:', socket.id);
   // 连上后，立刻拉取一次最新的活跃房间
@@ -89,11 +107,16 @@ socket.on('connect', () => {
     statusText.style.color = '#f57c00';
     statusText.innerText = '🔄 网络发生瞬断，正在为您自动恢复盘面中...';
     if (networkManager instanceof HostPeerManager) {
-      const payload = { roomId: currentRoomId, nickname: currentNickname };
+      const payload = { roomId: networkManager.roomId || currentRoomId, nickname: currentNickname };
       if (currentPassword !== null) payload.password = currentPassword;
       socket.emit('create-room', payload);
     } else if (networkManager instanceof GuestPeerManager) {
-      socket.emit('join-room', { roomId: currentRoomId, nickname: currentNickname, playerId: localPlayerId });
+      // 核心修复：拦截断线重连死循环！必须彻底销毁旧实例并重建 GuestPeerManager 重新走完整的打洞流程
+      socket.emit('get-turn-credentials', (iceServers) => {
+        if (networkManager.pc) networkManager.pc.close();
+        // 实例化 GuestPeerManager 会在其内部自动发射 join-room 信号
+        networkManager = new GuestPeerManager(currentRoomId, socket, store, currentNickname, { iceServers }, localPlayerId);
+      });
     }
   }
 });
@@ -487,13 +510,15 @@ function renderBoard(state) {
   // 核心控制：当且仅当游戏正式开始（PLAYING阶段），才渲染玩家面板及备注控制条
   document.getElementById('inGameInfoBar').style.display = state.phase === 'PLAYING' ? 'flex' : 'none';
 
-  playerListDiv.innerHTML = '';
+  let newPlayerHtml = '';
   Object.values(state.players).forEach(player => {
     if (player.isOnline === false) return;
-    const tag = document.createElement('div');
-    tag.className = 'player-tag'; tag.style.backgroundColor = player.color; tag.innerText = player.name;
-    playerListDiv.appendChild(tag);
+    newPlayerHtml += `<div class="player-tag" style="background-color: ${player.color}">${player.name}</div>`;
   });
+  // 核心修复：使用 HTML 字符串比对，如果相同则不更新 DOM，彻底解决移动端高频点击和软键盘弹起时的列表闪烁消失问题
+  if (playerListDiv.innerHTML !== newPlayerHtml) {
+    playerListDiv.innerHTML = newPlayerHtml;
+  }
 
   const conflicts = Array(81).fill().map(() => new Set());
   for (let i = 0; i < 81; i++) {
@@ -574,7 +599,9 @@ btnLeave.addEventListener('click', () => {
       if (peers.length > 0) {
         let newHostSocketId = peers[0];
         for (const socketId of peers) { if (!networkManager.peers[socketId].isRelayMode) { newHostSocketId = socketId; break; } }
-        networkManager.socket.emit('migrate-host', { roomId: currentRoomId, newHostSocketId: newHostSocketId, gameState: store.getState() }, () => {
+        // 核心修复：改用服务器安全 Ack 回调，并确保 roomId 从网络管理器中精确获取
+        networkManager.socket.emit('migrate-host', { roomId: networkManager.roomId || currentRoomId, newHostSocketId: newHostSocketId, gameState: store.getState() }, () => {
+          console.log('[Migration] ✅ 房主迁移信令服务器已确认接收并转发，老房主现在安全退出...');
           window.location.reload();
         });
         return;
@@ -585,3 +612,8 @@ btnLeave.addEventListener('click', () => {
 });
 
 renderBoard(store.getState());
+
+// 核心修复：强制注入 CSS 抬高 vConsole 按钮，防止其被手机底部的安全区（小黑条）或游戏虚拟键盘遮挡
+const vcStyle = document.createElement('style');
+vcStyle.innerHTML = `#__vconsole .vc-switch { bottom: 120px !important; right: 20px !important; z-index: 99999 !important; box-shadow: 0 4px 10px rgba(0,0,0,0.3) !important;}`;
+document.head.appendChild(vcStyle);
