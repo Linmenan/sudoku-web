@@ -355,6 +355,25 @@ if (vkModeToggle) {
   });
 }
 
+// 体验优化：智能防遮挡平滑滚动逻辑
+function ensureCellVisible(index) {
+  setTimeout(() => {
+    const cellNode = document.querySelector(`.cell[data-index="${index}"]`);
+    if (!cellNode) return;
+    const rect = cellNode.getBoundingClientRect();
+    // 虚拟键盘预估高度 + 缓冲距离 = 约 250px 危险区
+    const safeBottom = window.innerHeight - 250; 
+    
+    if (rect.bottom > safeBottom) {
+      // 被底部键盘遮挡，向上顶起页面
+      window.scrollBy({ top: rect.bottom - safeBottom + 20, behavior: 'smooth' });
+    } else if (rect.top < 60) {
+      // 溢出屏幕顶部，向下拉回页面
+      window.scrollBy({ top: rect.top - 80, behavior: 'smooth' });
+    }
+  }, 50); // 给键盘 UI 的渲染弹出预留微小延迟
+}
+
 for (let i = 0; i < 81; i++) {
   const cell = document.createElement('div');
   cell.className = 'cell';
@@ -362,7 +381,9 @@ for (let i = 0; i < 81; i++) {
   if (i % 9 === 2 || i % 9 === 5) cell.classList.add('border-right-thick');
   if (Math.floor(i / 9) === 2 || Math.floor(i / 9) === 5) cell.classList.add('border-bottom-thick');
   cell.addEventListener('click', (e) => {
-    e.stopPropagation(); executeAction({ type: 'UPDATE_FOCUS', payload: { index: i } });
+    e.stopPropagation(); 
+    executeAction({ type: 'UPDATE_FOCUS', payload: { index: i } });
+    ensureCellVisible(i); // 点击格子时动态推拉视口防遮挡
   });
   boardDiv.appendChild(cell);
 }
@@ -417,7 +438,9 @@ document.addEventListener('keydown', (e) => {
 
     if (moved) {
       e.preventDefault();
-      executeAction({ type: 'UPDATE_FOCUS', payload: { index: row * 9 + col } });
+      const newIndex = row * 9 + col;
+      executeAction({ type: 'UPDATE_FOCUS', payload: { index: newIndex } });
+      ensureCellVisible(newIndex); // 键盘方向键移动时同样进行防遮挡跟踪
       return;
     }
   }
@@ -516,7 +539,11 @@ function renderBoard(state) {
   });
 
   if (virtualKeyboard) {
-    virtualKeyboard.style.display = (localFocusedIndex !== null && localFocusedIndex !== undefined) ? 'grid' : 'none';
+    const hasFocus = (localFocusedIndex !== null && localFocusedIndex !== undefined);
+    virtualKeyboard.style.display = hasFocus ? 'grid' : 'none';
+    
+    // 核心体验修复：当键盘弹起时，给整个页面底部强制留出 260px 的空白缓冲，防止无法向下滚动
+    document.body.style.paddingBottom = hasFocus ? '260px' : '60px';
   }
 
   // 渲染公屏聊天区域
