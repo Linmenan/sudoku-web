@@ -81,6 +81,13 @@
   </style>
   </head>
 <body>
+  <script src="https://cdn.bootcdn.net/ajax/libs/vConsole/3.15.1/vconsole.min.js"></script>
+  <script>
+    if (window.VConsole) {
+      window.vConsole = new window.VConsole();
+      console.log('🐞 vConsole 已重新启动，手机端调试按钮满血回归！');
+    }
+  </script>
 
   <div id="controls">
     <h2 id="mainTitle" style="text-align: center; margin: 0 0 15px 0; color: #1976d2; font-size: 24px;">联机数独</h2>
