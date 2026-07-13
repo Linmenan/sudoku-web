@@ -66,8 +66,11 @@ export class GuestPeerManager {
     // 监听中继信道，当打洞失败时使用
     this.socket.on('relay-action', ({ from, action }) => {
       if (action.type === 'SYNC') {
-        console.log(`[WebRTC-Guest] 🔄 收到中继服务器转发的全量同步数据！`);
+        console.log(`[WebRTC-Guest] 🔄 收到中继服务器转发的全量同步数据！来自: ${from}`);
+        this.hostId = from; // 核心修复：即使底层信令全部失败，也能从中继包中直接捕获并绑定房主ID！
         this.store.setState(action.payload);
+        // 核心加固：防止因为房主端状态延迟导致自己从列表中消失（移动端切后台极易发生）
+        this.store.dispatch({ type: 'ADD_PLAYER', payload: { id: this.playerId, name: this.nickname, isHost: false } });
       }
     });
 
@@ -130,6 +133,8 @@ export class GuestPeerManager {
         if (message.type === 'SYNC') {
           console.log(`[WebRTC-Guest] 🔄 收到盘面全量同步数据`);
           this.store.setState(message.payload);
+          // 核心加固：防止全局状态同步包抹杀掉自己本地的物理在线状态
+          this.store.dispatch({ type: 'ADD_PLAYER', payload: { id: this.playerId, name: this.nickname, isHost: false } });
         }
       };
     };
@@ -137,12 +142,16 @@ export class GuestPeerManager {
 
   sendAction(action) {
     if (this.isRelayMode && this.hostId) {
-      // 降级模式下，将游戏操作打包给信令服务器进行物理转发
-      this.socket.emit('relay-action', { to: this.hostId, action });
+      // 降级模式下，将游戏操作打包给信令服务器进行物理转发，强制携带playerId供房主溯源
+      this.socket.emit('relay-action', { to: this.hostId, playerId: this.playerId, action });
     } else if (this.channel && this.channel.readyState === 'open') {
       this.channel.send(JSON.stringify(action));
     } else {
-      console.warn(`[WebRTC-Guest] ⚠️ 尝试发送操作，但底层通道尚未准备完毕！`);
+      console.warn(`[WebRTC-Guest] ⚠️ 底层通道尚未就绪！主动尝试通过信令中继进行操作抢发...`);
+      // 体验极致优化：在 P2P 尚未建立的 0~5 秒内，玩家的任何操作直接强行走服务器中继，拒绝死锁卡顿！
+      if (this.hostId) {
+        this.socket.emit('relay-action', { to: this.hostId, playerId: this.playerId, action });
+      }
     }
   }
 }

@@ -38,14 +38,15 @@ export class HostPeerManager {
     this.socket.emit('create-room', payload);
 
     // 监听来自降级 Guest 的中继请求
-    this.socket.on('relay-action', ({ from, action }) => {
+    this.socket.on('relay-action', ({ from, playerId, action }) => {
+      // 核心修复：哪怕由于网络波动导致 peers 队列没同步该 Socket 连接，
+      // 只要对方提供了合法的 playerId（业务身份），房主无脑接管并放行其操作！
       if (this.peers[from]) {
-        // 核心修复：强制放行！只要收到 Guest 被迫发送的中继请求，立刻为其激活服务器中继，解决玩家无法操作的 Bug！
         this.peers[from].isRelayMode = true; 
-        const realPlayerId = this.peers[from].playerId || from; 
-        const updatedState = this.store.dispatch(action, realPlayerId);
-        this.broadcast({ type: 'SYNC', payload: updatedState });
       }
+      const realPlayerId = (this.peers[from] && this.peers[from].playerId) || playerId || from; 
+      const updatedState = this.store.dispatch(action, realPlayerId);
+      this.broadcast({ type: 'SYNC', payload: updatedState });
     });
 
     this.socket.on('player-joined', async ({ socketId, playerId, nickname }) => {
@@ -53,7 +54,12 @@ export class HostPeerManager {
       
       // 核心修改：使用固化的业务身份 playerId，即使重连，之前 gameState 里的颜色和积分也会无缝继承！
       this.store.dispatch({ type: 'ADD_PLAYER', payload: { id: playerId, name: nickname, isHost: false } });
-      this.broadcast({ type: 'SYNC', payload: this.store.getState() });
+      
+      // 终极修复方案：为了绝对防止由于 WebRTC P2P 打洞缓慢造成的长时间空盘面（死锁）
+      // 房主在收到加入通知的【第一瞬间】，立刻通过高可靠的 WebSocket 物理中继给该新玩家单点下发一次全量 SYNC 包！
+      this.socket.emit('relay-action', { to: socketId, action: { type: 'SYNC', payload: this.store.getState() } });
+      
+      this.broadcast({ type: 'SYNC', payload: this.store.getState() }); // 广播给其他已经连接稳妥的老玩家
       
       try {
         const pc = new RTCPeerConnection(this.iceConfig);

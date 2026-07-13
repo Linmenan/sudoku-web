@@ -615,5 +615,6 @@ renderBoard(store.getState());
 
 // 核心修复：强制注入 CSS 抬高 vConsole 按钮，防止其被手机底部的安全区（小黑条）或游戏虚拟键盘遮挡
 const vcStyle = document.createElement('style');
-vcStyle.innerHTML = `#__vconsole .vc-switch { bottom: 120px !important; right: 20px !important; z-index: 99999 !important; box-shadow: 0 4px 10px rgba(0,0,0,0.3) !important;}`;
+// 抬升至距底 250px 危险区外，强行放大 1.1 倍体积，穿透全部层级拦截
+vcStyle.innerHTML = `#__vconsole .vc-switch { bottom: 250px !important; right: 15px !important; z-index: 999999 !important; box-shadow: 0 4px 15px rgba(0,0,0,0.5) !important; transform: scale(1.1) !important;}`;
 document.head.appendChild(vcStyle);
