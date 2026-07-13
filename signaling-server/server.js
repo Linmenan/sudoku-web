@@ -2,7 +2,7 @@
  * @Author: yanyu yanyu1@xcmg.com
  * @Date: 2026-07-09 09:12:09
  * @LastEditors: yanyu yanyu1@xcmg.com
- * @LastEditTime: 2026-07-11 14:46:26
+ * @LastEditTime: 2026-07-13 16:47:19
  * @FilePath: /sudoku-webrtc/signaling-server/server.js
  * @Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
  */
@@ -29,11 +29,19 @@ const io = new Server(server, { cors: { origin: '*' } });
 
 // 新增：用于存储房间的鉴权密码信息
 const roomAuthData = new Map(); 
+// 新增：用于高效汇总全服活跃房间状态 (roomId -> { roomId, hostNickname, isPrivate })
+const activeRooms = new Map(); 
 
 // 关键点：让 Node.js 直接提供前端的打包页面
 app.use(express.static(path.join(__dirname, '../client/dist')));
 
 io.on('connection', (socket) => {
+  // 新增：允许新进玩家主动拉取当前的活跃房间列表
+  socket.on('get-active-rooms', (callback) => {
+    if (typeof callback === 'function') {
+      callback(Array.from(activeRooms.values()));
+    }
+  });
   // 新增：给前端下发 Twilio 动态 TURN 穿透凭证的接口
   socket.on('get-turn-credentials', async (callback) => {
     try {
@@ -63,14 +71,23 @@ io.on('connection', (socket) => {
   socket.on('create-room', ({ roomId, nickname, password }) => {
     socket.join(roomId);
     socket.nickname = nickname; 
+    socket.roomId = roomId; // 绑定方便解散时溯源
     
-    // 鉴权逻辑：如果明确传了 null 代表公开房间，传了 string 代表私密房间。
-    // 如果是 undefined (比如刚才写的房主断线迁移触发重新建房)，则保留原房间的密码状态！
+    // 鉴权逻辑
     if (password !== undefined) {
       if (password === null) roomAuthData.delete(roomId);
       else roomAuthData.set(roomId, password);
     }
     
+    // 录入全服活跃房间字典
+    activeRooms.set(roomId, {
+      roomId,
+      hostNickname: nickname,
+      isPrivate: (password !== null && password !== undefined && password !== '')
+    });
+    
+    // 全网广播最新房间列表
+    io.emit('rooms-updated', Array.from(activeRooms.values()));
     socket.emit('room-created', socket.id);
   });
 
@@ -119,23 +136,33 @@ io.on('connection', (socket) => {
   // 新增：房主迁移专属信令
   socket.on('migrate-host', ({ roomId, newHostSocketId, gameState }, callback) => {
     console.log(`[Signaling] 🔄 房间 ${roomId} 正在进行房主迁移，新房主 Socket: ${newHostSocketId}`);
-    // 广播给房间里剩下的所有玩家（原房主发完这个指令后就会断开）
-    socket.to(roomId).emit('host-migrated', { newHostSocketId, gameState });
     
-    // 核心修复：支持客户端传入的 Ack 回调函数，在推送完全量广播后立刻通知老房主，实现安全握手。
+    // 同步更新活跃房间的房主昵称
+    const newHostSocket = io.sockets.sockets.get(newHostSocketId);
+    if (newHostSocket && activeRooms.has(roomId)) {
+      const roomInfo = activeRooms.get(roomId);
+      roomInfo.hostNickname = newHostSocket.nickname || '新房主';
+      activeRooms.set(roomId, roomInfo);
+    }
+
+    socket.to(roomId).emit('host-migrated', { newHostSocketId, gameState });
+    io.emit('rooms-updated', Array.from(activeRooms.values()));
+    
     if (typeof callback === 'function') callback();
   });
 
   socket.on('disconnect', () => {
     io.emit('player-disconnected', { socketId: socket.id, playerId: socket.playerId });
     
-    // 垃圾回收：当没有玩家在房间时，清除该房间的密码缓存
-    for (const [roomId, pwd] of roomAuthData.entries()) {
+    // 垃圾回收：当没有玩家在房间时，清除该房间的密码缓存和活跃房间节点
+    for (const roomId of activeRooms.keys()) {
       const room = io.sockets.adapter.rooms.get(roomId);
       if (!room || room.size === 0) {
         roomAuthData.delete(roomId);
+        activeRooms.delete(roomId);
       }
     }
+    io.emit('rooms-updated', Array.from(activeRooms.values()));
   });
 });
 

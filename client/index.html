@@ -3,106 +3,63 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>WebRTC Sudoku</title>
+  <title>联机数独</title>
   <style>
-    /* 增加底部 padding 防止触屏小屏幕下键盘遮盖棋盘 */
-    body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; background-color: #f5f5f5; padding-bottom: 120px;}
+    body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; background-color: #f5f5f5; padding-bottom: 120px; margin: 0; padding-top: 15px;}
     
-    #controls { width: 100%; max-width: 600px; background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); margin-bottom: 20px;}
-    .setup-panel, .network-panel { display: block; margin-bottom: 10px; padding-bottom: 10px; border-bottom: 1px solid #eee; }
-    .network-panel { display: flex; gap: 10px; align-items: center; justify-content: space-between;}
+    #controls { width: 94%; max-width: 600px; background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); margin-bottom: 15px; box-sizing: border-box;}
+    .setup-panel { display: block; margin-bottom: 10px; }
     
-    #statusText { font-weight: bold; margin-left: 10px;}
+    /* 统一提示文本占位样式 */
+    #statusText { font-weight: bold; padding: 10px; border-radius: 4px; background: #f8f9fa; border-left: 4px solid #ccc; font-size: 14px; margin-bottom: 15px; min-height: 20px; word-break: break-all;}
     #btnClear { color: #d32f2f; border-color: #d32f2f; background: #fff; cursor: pointer; }
     
-    /* 玩家列表与模式切换区 */
-    .info-bar { display: flex; justify-content: space-between; align-items: flex-start; padding-top: 10px;}
+    /* 标签页导航控制 */
+    .tabs-container { display: flex; gap: 5px; margin-bottom: 15px; border-bottom: 2px solid #e0e0e0; }
+    .tab-btn { padding: 8px 16px; cursor: pointer; background: #f5f5f5; border: 1px solid #e0e0e0; border-bottom: none; border-radius: 6px 6px 0 0; font-weight: bold; font-size: 14px; color: #666; transition: all 0.2s; }
+    .tab-btn.active { background: #1976d2; color: white; border-color: #1976d2; }
+    .tab-content { display: none; padding: 5px 0; }
+    .tab-content.active { display: block; }
+
+    /* 房间表格列表样式 */
+    .room-table { width: 100%; border-collapse: collapse; margin-bottom: 12px; font-size: 14px; background: white; }
+    .room-table th, .room-table td { border: 1px solid #e0e0e0; padding: 10px; text-align: left; }
+    .room-table th { background-color: #f5f5f5; font-weight: bold; color: #333; }
+    .room-table tr.selected { background-color: #e3f2fd !important; font-weight: bold; }
+    .room-table tr:hover { background-color: #fafafa; cursor: pointer; }
+
+    /* 玩家列表与模式切换区 (开局后显现) */
+    .info-bar { display: none; justify-content: space-between; align-items: flex-start; padding-top: 15px; border-top: 1px solid #eee; margin-top: 15px;}
     #playerList { display: flex; flex-wrap: wrap; gap: 8px; flex: 1;}
     .player-tag { padding: 4px 8px; border-radius: 4px; color: white; font-size: 14px; font-weight: bold;}
     
     .mode-toggle { display: flex; align-items: center; gap: 5px; font-weight: bold; cursor: pointer; padding: 5px 10px; background: #e0e0e0; border-radius: 4px; user-select: none;}
     .mode-toggle.active { background: #ffeb3b; color: #f57f17; border: 1px solid #fbc02d;}
 
-    /* 引入 CSS 变量与响应式媒体查询，确保小屏幕棋盘不溢出 */
-    :root {
-      --cell-size: 45px;
-    }
+    /* 响应式等比缩放棋盘 */
+    :root { var-cell-size: 45px; --cell-size: 45px; }
     @media (max-width: 450px) {
-      :root {
-        --cell-size: 10.2vw; /* 小屏幕下棋盘按屏幕宽度自动等比缩放 */
-      }
+      :root { --cell-size: 10.2vw; }
       .cell { font-size: 6vw !important; }
       .notes-grid { transform: scale(0.85); }
     }
-    
     #board { display: grid; grid-template-columns: repeat(9, var(--cell-size)); background: #000; border: 3px solid #000; gap: 1px; width: max-content; margin: 0 auto; }
     .cell { width: var(--cell-size); height: var(--cell-size); background: white; display: flex; align-items: center; justify-content: center; font-size: 24px; cursor: pointer; user-select: none; color: #1976d2; box-sizing: border-box; position: relative;}
     
     .cell.border-right-thick { border-right: 3px solid #000 !important; }
     .cell.border-bottom-thick { border-bottom: 3px solid #000 !important; }
-    .cell.locked { color: #000; font-weight: bold; }
+    .cell.locked { color: #000; font-weight: bold; background-color: #eceff1; }
     
-    /* 新增：同数高亮特殊视觉光效样式（仅对当前本地玩家生效） */
-    .cell.number-highlight { 
-      background-color: #fff9c4 !important; /* 极其柔和的浅金底色 */
-      text-shadow: 0 0 8px #fbc02d, 0 0 12px #fbc02d; /* 字符轮廓金黄色特殊光效 */
-      font-weight: bold; 
-    }
-    
-    /* 3x3 备注网格系统 */
-    .notes-grid {
-      display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr);
-      width: 100%; height: 100%; font-size: 11px; color: #757575; line-height: 1; padding: 2px; box-sizing: border-box;
-      pointer-events: none; /* 核心修复：点击事件穿透，确保 e.target 永远是 .cell 本身 */
-    }
+    /* 同数金黄高亮特殊视觉光效 */
+    .cell.number-highlight { background-color: #fff9c4 !important; text-shadow: 0 0 8px #fbc02d, 0 0 12px #fbc02d; font-weight: bold; }
+    .notes-grid { display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr); width: 100%; height: 100%; font-size: 11px; color: #757575; line-height: 1; padding: 2px; box-sizing: border-box; pointer-events: none; }
     .note-item { display: flex; align-items: center; justify-content: center; }
     
-    /* 胜利弹窗样式 */
-    #winModal {
-      display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-      background: rgba(0,0,0,0.6); z-index: 1000; align-items: center; justify-content: center;
-    }
-    .win-content {
-      background: white; padding: 30px; border-radius: 12px; text-align: center; max-width: 400px;
-      box-shadow: 0 10px 30px rgba(0,0,0,0.3);
-    }
+    /* 胜利弹窗 */
+    #winModal { display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.6); z-index: 1000; align-items: center; justify-content: center; }
+    .win-content { background: white; padding: 30px; border-radius: 12px; text-align: center; max-width: 400px; box-shadow: 0 10px 30px rgba(0,0,0,0.3); }
     .score-item { display: flex; justify-content: space-between; margin: 10px 0; font-size: 18px; font-weight: bold;}
-    #btnLeave { background: #f44336; color: white; border: none; padding: 5px 15px; border-radius: 4px; cursor: pointer; margin-left: 10px; display: none;}
-  
-    /* 虚拟键盘样式：三排紧凑布局优化版 */
-    #virtualKeyboard {
-      display: none; grid-template-columns: repeat(5, 1fr); gap: 5px;
-      position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%);
-      width: 98%; max-width: 450px; background: rgba(255,255,255,0.95);
-      padding: 8px; border-radius: 10px; box-shadow: 0 4px 20px rgba(0,0,0,0.2);
-      z-index: 1000; box-sizing: border-box; backdrop-filter: blur(5px);
-    }
-    .vk-key {
-      background: #fff; border: 1px solid #ddd; border-radius: 6px;
-      padding: 10px 0; font-size: 18px; font-weight: bold; color: #333;
-      text-align: center; cursor: pointer; user-select: none;
-      box-shadow: 0 2px 0 #ccc; transition: all 0.1s;
-      order: 1; /* 默认数字键排在最前面 */
-    }
-    .vk-key:active { transform: translateY(2px); box-shadow: 0 0 0 transparent; }
     
-    /* 巧妙利用 order 属性与 grid-column 实现: 
-       第一排: 1 2 3 4 5
-       第二排: 6 7 8 9 [删除]
-       第三排: [备注模式切换] */
-    .vk-key.vk-wide { font-size: 15px; }
-    .vk-key.vk-delete { order: 2; grid-column: span 1; color: #d32f2f; }
-    .vk-key.vk-mode { order: 3; grid-column: span 5; padding: 12px 0; background: #e0e0e0; color: #333; border-color: #bbb; box-shadow: 0 2px 0 #999; }
-    .vk-key.vk-mode.active { background: #ffeb3b; color: #f57f17; border-color: #fbc02d; box-shadow: 0 2px 0 #f9a825; }
-
-    /* 滑动开关 (Toggle Switch) 样式 */
-    .switch { position: relative; display: inline-block; width: 40px; height: 20px; }
-    .switch input { opacity: 0; width: 0; height: 0; }
-    .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; transition: .4s; border-radius: 20px; }
-    .slider:before { position: absolute; content: ""; height: 16px; width: 16px; left: 2px; bottom: 2px; background-color: white; transition: .4s; border-radius: 50%; }
-    input:checked + .slider { background-color: #f57c00; }
-    input:checked + .slider:before { transform: translateX(20px); }
-
     /* 聊天区样式 */
     #chatPanel { width: 100%; max-width: 600px; background: white; margin-top: 15px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); display: none; flex-direction: column; overflow: hidden; box-sizing: border-box; }
     #chatMessages { height: 130px; overflow-y: auto; padding: 10px; font-size: 14px; line-height: 1.4; background: #fafafa; border-bottom: 1px solid #eee; display: flex; flex-direction: column; gap: 4px;}
@@ -111,71 +68,89 @@
     .chat-input-area { display: flex; padding: 8px; background: #fff; gap: 8px; }
     #chatInput { flex: 1; padding: 6px 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 14px; outline: none; }
     #chatInput:focus { border-color: #1976d2; }
-    #btnSendChat { padding: 6px 15px; background: #1976d2; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; transition: background 0.1s; }
-    #btnSendChat:active { background: #1565c0; }
+    #btnSendChat { padding: 6px 15px; background: #1976d2; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
+
+    /* 三排紧凑型触屏键盘 */
+    #virtualKeyboard { display: none; grid-template-columns: repeat(5, 1fr); gap: 5px; position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%); width: 98%; max-width: 450px; background: rgba(255,255,255,0.95); padding: 8px; border-radius: 10px; box-shadow: 0 4px 20px rgba(0,0,0,0.2); z-index: 1000; box-sizing: border-box; backdrop-filter: blur(5px); }
+    .vk-key { background: #fff; border: 1px solid #ddd; border-radius: 6px; padding: 10px 0; font-size: 18px; font-weight: bold; color: #333; text-align: center; cursor: pointer; user-select: none; box-shadow: 0 2px 0 #ccc; transition: all 0.1s; order: 1; }
+    .vk-key:active { transform: translateY(2px); box-shadow: 0 0 0 transparent; }
+    .vk-key.vk-wide { font-size: 15px; }
+    .vk-key.vk-delete { order: 2; grid-column: span 1; color: #d32f2f; }
+    .vk-key.vk-mode { order: 3; grid-column: span 5; padding: 12px 0; background: #e0e0e0; color: #333; border-color: #bbb; box-shadow: 0 2px 0 #999; }
+    .vk-key.vk-mode.active { background: #ffeb3b; color: #f57f17; border-color: #fbc02d; box-shadow: 0 2px 0 #f9a825; }
   </style>
-  <script src="https://unpkg.com/vconsole@latest/dist/vconsole.min.js"></script>
-  <script>
-    // 初始化 vConsole
-    var vConsole = new window.VConsole();
-    console.log('🐞 vConsole 已启动，现在可以在手机上查看日志了！');
-  </script>
+  <script src="https://cdn.bootcdn.net/ajax/libs/vConsole/3.15.1/vconsole.min.js"></script>
+  <script>var vConsole = new window.VConsole();</script>
 </head>
 <body>
+
   <div id="controls">
-    <div class="setup-panel" id="setupPanel">
-      <div style="margin-bottom: 10px;">阶段：出题模式 (请点击下方格子并用键盘 1-9 填入数字)</div>
-      
-      <div style="margin-bottom: 10px; display: flex; align-items: center; gap: 8px;">
-        <select id="difficultySelect" style="padding: 4px; border-radius: 4px; border: 1px solid #ccc; font-size: 14px;">
-          <option value="easy">简单</option>
-          <option value="medium" selected>中等</option>
-          <option value="hard">困难</option>
-        </select>
-        <button id="btnGenerate" style="cursor: pointer;">🎲 随机生成谜题</button>
-      </div>
-
-      <div style="margin-bottom: 10px; display: flex; align-items: center; font-size: 14px;">
-        <label class="switch">
-          <input type="checkbox" id="debugModeCheck">
-          <span class="slider"></span>
-        </label>
-        <span style="margin-left: 8px; color: #f57c00; font-weight: bold;">快速 Debug 模式 (无视解题限制直接开房)</span>
-      </div>
-
-      <button id="btnVerify">验证谜题可解性</button>
-      <button id="btnClear">一键清空</button>
-      <span id="statusText"></span>
-    </div>
+    <h2 style="text-align: center; margin: 0 0 15px 0; color: #1976d2; font-size: 24px;">联机数独</h2>
     
-    <div class="network-panel" style="flex-direction: column; align-items: flex-start; gap: 10px;">
-      <div style="width: 100%; display: flex; flex-wrap: wrap; gap: 6px; align-items: center;">
-        <input type="text" id="nicknameInput" placeholder="你的昵称" style="width: 80px; padding: 4px;">
-        <input type="text" id="roomIdInput" placeholder="输入房间号" style="width: 90px; padding: 4px;">
+    <div style="margin-bottom: 12px; display: flex; align-items: center; gap: 8px; font-size: 15px;">
+      <strong style="white-space: nowrap;">设置昵称：</strong>
+      <input type="text" id="nicknameInput" placeholder="请输入你的昵称" style="width: 100%; padding: 6px 10px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box;">
+    </div>
+
+    <div id="statusText">💡 出题提示：可在下方盘面任意点击并录入数字，或使用随机谜题生成。</div>
+    
+    <div style="display: flex; justify-content: space-between; align-items: center; width:100%;">
+      <div id="roomInfoDisplay" style="display: none; padding: 10px; background: #e3f2fd; border-radius: 6px; font-size: 14px; color: #1565c0; flex: 1; margin-right: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);"></div>
+      <button id="btnLeave" style="background: #f44336; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-weight: bold; display: none; white-space: nowrap;">退出房间</button>
+    </div>
+
+    <div class="setup-panel" id="setupPanel">
+      <div class="tabs-container">
+        <button class="tab-btn active" data-tab="createTab">创建房间</button>
+        <button class="tab-btn" data-tab="joinTab">加入房间</button>
+      </div>
+
+      <div id="createTab" class="tab-content active">
+        <div style="margin-bottom: 12px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+          <select id="difficultySelect" style="padding: 6px; border-radius: 4px; border: 1px solid #ccc; font-size: 14px; height: 32px;">
+            <option value="easy">简单</option>
+            <option value="medium" selected>中等</option>
+            <option value="hard">困难</option>
+          </select>
+          <button id="btnGenerate" style="height: 32px; padding: 0 12px; cursor: pointer; border: 1px solid #ccc; background:#fff; border-radius:4px;">🎲 随机生成谜题</button>
+          <button id="btnClear" style="height: 32px; padding: 0 12px; border-radius:4px; border:1px solid #d32f2f;">一键清空</button>
+        </div>
         
-        <label style="display:flex; align-items:center; gap:2px; font-size:14px; cursor:pointer;">
-          <input type="checkbox" id="isPrivateCheck"> 私密
-        </label>
-        <input type="password" id="passwordInput" placeholder="房间密码" style="width: 70px; padding: 4px; display: none;">
+        <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center; background: #fdfdfd; padding: 10px; border-radius: 6px; border: 1px solid #e0e0e0;">
+          <input type="text" id="roomIdInput" placeholder="房间名称" style="width: 110px; padding: 6px; border: 1px solid #ccc; border-radius: 4px;">
+          <label style="display:flex; align-items:center; gap:2px; font-size:14px; cursor:pointer; user-select:none;">
+            <input type="checkbox" id="isPrivateCheck"> 私密
+          </label>
+          <input type="password" id="passwordInput" placeholder="房间密码" style="width: 90px; padding: 6px; border: 1px solid #ccc; border-radius: 4px; display: none;">
+          <button id="btnVerify" style="background: #2e7d32; color: white; border: none; padding: 7px 16px; border-radius: 4px; cursor: pointer; font-weight: bold; margin-left: auto;">验证建房</button>
+        </div>
+      </div>
 
-        <button id="btnCreate" disabled>创建房间</button>
-        <button id="btnJoin">加入房间</button>
-        <button id="btnLeave">退出房间</button>
+      <div id="joinTab" class="tab-content">
+        <div style="max-height: 160px; overflow-y: auto; margin-bottom: 12px; border: 1px solid #ddd; border-radius: 4px; background: #fff;">
+          <table class="room-table">
+            <thead>
+              <tr>
+                <th>房主昵称</th>
+                <th>房间名</th>
+                <th>私密</th>
+              </tr>
+            </thead>
+            <tbody id="roomListBody">
+              <tr>
+                <td colspan="3" style="text-align:center; color:#999; padding:15px;">正在探测全服活跃房间...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px; justify-content: flex-end;">
+          <input type="password" id="joinPasswordInput" placeholder="输入房间密码" style="width: 120px; padding: 6px; border: 1px solid #ccc; border-radius: 4px; display: none;">
+          <button id="btnJoin" style="background: #1976d2; color: white; border: none; padding: 7px 16px; border-radius: 4px; cursor: pointer; font-weight: bold;">加入房间</button>
+        </div>
       </div>
     </div>
 
-    <div id="roomInfoDisplay" style="display: none; padding: 10px; background: #e3f2fd; border-radius: 8px; width: 100%; max-width: 600px; box-sizing: border-box; font-size: 15px; color: #1565c0; margin-bottom: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);"></div>
-
-    <div id="winModal">
-      <div class="win-content">
-        <h2>🎉 谜题被成功解开！</h2>
-        <p>本次协作贡献度 (填入正确数字数量)：</p>
-        <div id="scoreBoard"></div>
-        <button onclick="window.location.reload()" style="margin-top:20px; padding:8px 20px; cursor:pointer;">再来一局 / 退出</button>
-      </div>
-    </div>
-
-    <div class="info-bar">
+    <div class="info-bar" id="inGameInfoBar">
       <div id="playerList"></div>
       <div id="modeToggle" class="mode-toggle">📝 备注模式 (Off)</div>
     </div>
@@ -203,6 +178,15 @@
     <div class="vk-key" data-key="9">9</div>
     <div class="vk-key vk-wide vk-mode" id="vkModeToggle">📝 备注 (Off)</div>
     <div class="vk-key vk-wide vk-delete" data-key="Delete">删除</div>
+  </div>
+
+  <div id="winModal">
+    <div class="win-content">
+      <h2>🎉 谜题被成功解开！</h2>
+      <p>本次协作贡献度 (填入正确数字数量)：</p>
+      <div id="scoreBoard"></div>
+      <button onclick="window.location.reload()" style="margin-top:20px; padding:8px 20px; cursor:pointer; background:#1976d2; color:white; border:none; border-radius:4px;">再来一局 / 退出</button>
+    </div>
   </div>
 
   <script type="module" src="/src/main.js"></script>
