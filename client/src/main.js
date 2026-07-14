@@ -619,7 +619,7 @@ vcStyle.innerHTML = `
   #__vconsole .vc-switch { 
     /* 使用 calc 和 env() 动态计算，确保贴底但不被手机系统小白条遮挡 */
     bottom: calc(20px + env(safe-area-inset-bottom)) !important; 
-    right: 15px !important; 
+    right: 1px !important; 
     z-index: 999999 !important; 
     box-shadow: 0 4px 15px rgba(0,0,0,0.5) !important; 
     /* 稍微缩小一点，避免在右下角太突兀 */
