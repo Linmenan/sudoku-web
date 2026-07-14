@@ -613,8 +613,17 @@ btnLeave.addEventListener('click', () => {
 
 renderBoard(store.getState());
 
-// 核心修复：强制注入 CSS 抬高 vConsole 按钮，防止其被手机底部的安全区（小黑条）或游戏虚拟键盘遮挡
+// 优化：重新调整 vConsole 按钮到右下角，并适配全面屏底部安全区
 const vcStyle = document.createElement('style');
-// 抬升至距底 250px 危险区外，强行放大 1.1 倍体积，穿透全部层级拦截
-vcStyle.innerHTML = `#__vconsole .vc-switch { bottom: 250px !important; right: 15px !important; z-index: 999999 !important; box-shadow: 0 4px 15px rgba(0,0,0,0.5) !important; transform: scale(1.1) !important;}`;
+vcStyle.innerHTML = `
+  #__vconsole .vc-switch { 
+    /* 使用 calc 和 env() 动态计算，确保贴底但不被手机系统小白条遮挡 */
+    bottom: calc(20px + env(safe-area-inset-bottom)) !important; 
+    right: 15px !important; 
+    z-index: 999999 !important; 
+    box-shadow: 0 4px 15px rgba(0,0,0,0.5) !important; 
+    /* 稍微缩小一点，避免在右下角太突兀 */
+    transform: scale(0.5) !important; 
+  }
+`;
 document.head.appendChild(vcStyle);
