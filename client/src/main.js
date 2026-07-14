@@ -408,6 +408,14 @@ for (let i = 0; i < 81; i++) {
     executeAction({ type: 'UPDATE_FOCUS', payload: { index: i } });
     ensureCellVisible(i); // 点击格子时动态推拉视口防遮挡
   });
+  cell.addEventListener('dblclick', (e) => {
+    e.stopPropagation();
+    const state = store.getState();
+    // 验证是否已聚焦，且为非初始锁定位置并存在填入的数字
+    if (state.focuses[localPlayerId] === i && !state.locked[i] && state.board[i] !== null) {
+      executeAction({ type: 'TOGGLE_CHECK_CELL', payload: { index: i } });
+    }
+  });
   boardDiv.appendChild(cell);
 }
 
@@ -540,6 +548,7 @@ function renderBoard(state) {
     if (index % 9 === 2 || index % 9 === 5) className += ' border-right-thick';
     if (Math.floor(index / 9) === 2 || Math.floor(index / 9) === 5) className += ' border-bottom-thick';
     if (state.locked[index]) className += ' locked';
+    if (state.checkedCells && state.checkedCells[index]) className += ' checked';
     if (highlightedNum !== null && state.board[index] === highlightedNum) className += ' number-highlight';
     cell.className = className;
     

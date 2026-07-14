@@ -13,6 +13,7 @@ export const createStore = (onStateChange = () => {}) => {
     players: {},
     cellOwners: Array(81).fill(null),
     chatMessages: [], // 新增：保存房间聊天记录
+    checkedCells: Array(81).fill(false), // 新增：保存单元格检查标记
   };
 
   const getRowColGrid = (index) => {
@@ -37,6 +38,7 @@ export const createStore = (onStateChange = () => {}) => {
           if (state.board[index] === value) break; 
           
           state.board[index] = value;
+          state.checkedCells[index] = false; // 当单元格数字发生改变时，自动将“检查过”标记移除
 
           // 核心机制：记录盘面贡献者
           if (state.phase === 'PLAYING') {
@@ -64,6 +66,14 @@ export const createStore = (onStateChange = () => {}) => {
           }
           break;
         }
+        case 'TOGGLE_CHECK_CELL': {
+          const { index } = action.payload;
+          // 仅允许在游戏中、非锁定谜题初始格子，且该格子内部有填入大数字时进行标记翻转
+          if (state.phase === 'PLAYING' && !state.locked[index] && state.board[index] !== null) {
+            state.checkedCells[index] = !state.checkedCells[index];
+          }
+          break;
+        }
         case 'UPDATE_FOCUS': {
           const { index } = action.payload;
           if (index === null) {
@@ -82,6 +92,7 @@ export const createStore = (onStateChange = () => {}) => {
           if (state.phase === 'SETUP') {
             state.board.fill(null);
             state.notes.forEach(note => note.length = 0);
+            state.checkedCells.fill(false);
           }
           break;
         }
@@ -91,6 +102,7 @@ export const createStore = (onStateChange = () => {}) => {
             const { newBoard } = action.payload;
             state.board = [...newBoard];
             state.notes.forEach(note => note.length = 0);
+            state.checkedCells.fill(false);
           }
           break;
         }
