@@ -488,10 +488,6 @@ function handleInput(key) {
   } else {
     const valToFill = isDelete ? null : num;
     executeAction({ type: 'FILL_NUM', payload: { index: focusedIndex, value: valToFill } });
-
-    if (store.getState().phase === 'PLAYING' && isBoardSolved(store.getState().board)) {
-      triggerWinSequence(store.getState());
-    }
   }
 }
 
@@ -869,6 +865,15 @@ function renderBoard(state) {
     }
   } else { chatPanel.style.display = 'none'; }
   
+  // 核心修复：将通关判定下沉至全局渲染流中。
+  // 这样不仅解决了其他玩家收不到弹窗的 Bug，同时也顺带修复了通过“分支合并”填满盘面时不触发通关的 Bug。
+  if (state.phase === 'PLAYING' && isBoardSolved(state.board)) {
+    // 增加防御性判断，防止 Reactivity 导致弹窗重复触发闪烁
+    if (winModal.style.display !== 'flex') {
+      triggerWinSequence(state);
+    }
+  }
+
   // 触发 UI 渲染时一并更新多级分支面板信息
   updateBranchUI(state);
 }
