@@ -447,8 +447,11 @@ for (let i = 0; i < 81; i++) {
   if (Math.floor(i / 9) === 2 || Math.floor(i / 9) === 5) cell.classList.add('border-bottom-thick');
   cell.addEventListener('click', (e) => {
     e.stopPropagation(); 
+    // 核心修复 1：【乐观预测】非房主玩家点击格子时，强制立即同步本地 Focus，消灭网络延迟造成的焦点断层
+    store.getState().focuses[localPlayerId] = i; 
     executeAction({ type: 'UPDATE_FOCUS', payload: { index: i } });
     ensureCellVisible(i); // 点击格子时动态推拉视口防遮挡
+    renderBoard(store.getState()); // 强制触发一次本地重绘，使得高亮即刻响应
   });
   cell.addEventListener('dblclick', (e) => {
     e.stopPropagation();
@@ -508,8 +511,11 @@ document.addEventListener('keydown', (e) => {
     if (moved) {
       e.preventDefault();
       const newIndex = row * 9 + col;
+      // 核心修复 2：键盘方向键也加入乐观预测机制，保障连续高亮不闪断
+      store.getState().focuses[localPlayerId] = newIndex; 
       executeAction({ type: 'UPDATE_FOCUS', payload: { index: newIndex } });
       ensureCellVisible(newIndex); // 键盘方向键移动时同样进行防遮挡跟踪
+      renderBoard(store.getState());
       return;
     }
   }
@@ -687,11 +693,12 @@ function renderBoard(state) {
 
   // 提取多级图层扁平化渲染引擎到最外部
   function getFlattenedBranch(playerId) {
-    const stack = state.branchStacks[playerId];
+    const stack = state.branchStacks ? state.branchStacks[playerId] : null;
     if (!stack || stack.length === 0) return null;
     const flat = Array(81).fill(null);
     for (let layer of stack) {
       for (let i = 0; i < 81; i++) {
+        // -1 作为墓碑标记时，需要被解析回 null，屏蔽下方图层
         if (layer[i] !== null) flat[i] = layer[i] === -1 ? null : layer[i];
       }
     }
@@ -700,9 +707,10 @@ function renderBoard(state) {
 
   const myFlat = getFlattenedBranch(localPlayerId);
   
-  // 核心修复：构造属于当前玩家视角的“有效盘面（包含主干和自己的各级探索分支覆盖）”
+  // 核心修复 3：绝对加固有效盘面（Effective Board），即使网络包存在细微的时序误差，也能从本地强制提取合并态
   const effectiveBoard = Array(81).fill(null);
   for (let i = 0; i < 81; i++) {
+    // 优先读取本地多级分支顶层映射结果，如果为空，才回退读取主干板数据
     effectiveBoard[i] = (myFlat && myFlat[i] !== null) ? myFlat[i] : state.board[i];
   }
 
