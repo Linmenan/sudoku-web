@@ -685,10 +685,31 @@ function renderBoard(state) {
     playerListDiv.innerHTML = newPlayerHtml;
   }
 
+  // 提取多级图层扁平化渲染引擎到最外部
+  function getFlattenedBranch(playerId) {
+    const stack = state.branchStacks[playerId];
+    if (!stack || stack.length === 0) return null;
+    const flat = Array(81).fill(null);
+    for (let layer of stack) {
+      for (let i = 0; i < 81; i++) {
+        if (layer[i] !== null) flat[i] = layer[i] === -1 ? null : layer[i];
+      }
+    }
+    return flat;
+  }
+
+  const myFlat = getFlattenedBranch(localPlayerId);
+  
+  // 核心修复：构造属于当前玩家视角的“有效盘面（包含主干和自己的各级探索分支覆盖）”
+  const effectiveBoard = Array(81).fill(null);
+  for (let i = 0; i < 81; i++) {
+    effectiveBoard[i] = (myFlat && myFlat[i] !== null) ? myFlat[i] : state.board[i];
+  }
+
   const conflicts = Array(81).fill().map(() => new Set());
   for (let i = 0; i < 81; i++) {
-    if (state.board[i] !== null) {
-      const val = state.board[i]; const target = getRowColGrid(i);
+    if (effectiveBoard[i] !== null) { // 将主干数据替换为结合了自己分支的有效盘面数据
+      const val = effectiveBoard[i]; const target = getRowColGrid(i);
       for (let j = 0; j < 81; j++) {
         const current = getRowColGrid(j);
         if (current.row === target.row || current.col === target.col || current.grid === target.grid) conflicts[j].add(val);
@@ -697,7 +718,8 @@ function renderBoard(state) {
   }
 
   const localFocusedIndex = state.focuses[localPlayerId];
-  const highlightedNum = (localFocusedIndex !== undefined && localFocusedIndex !== null) ? state.board[localFocusedIndex] : null;
+  // 基于有效盘面提取当前高亮的数字（确保探索分支里的数字点击后也能跨层高亮）
+  const highlightedNum = (localFocusedIndex !== undefined && localFocusedIndex !== null) ? effectiveBoard[localFocusedIndex] : null;
 
   const cells = document.querySelectorAll('.cell');
   cells.forEach((cell, index) => {
@@ -706,7 +728,8 @@ function renderBoard(state) {
     if (Math.floor(index / 9) === 2 || Math.floor(index / 9) === 5) className += ' border-bottom-thick';
     if (state.locked[index]) className += ' locked';
     if (state.checkedCells && state.checkedCells[index]) className += ' checked';
-    if (highlightedNum !== null && state.board[index] === highlightedNum) className += ' number-highlight';
+    // 基于有效盘面做相同数字的高亮响应
+    if (highlightedNum !== null && effectiveBoard[index] === highlightedNum) className += ' number-highlight';
     cell.className = className;
     cell.style.color = ''; // 重置字体颜色，防止沙盒模式的样式遗留污染主干
     
@@ -718,20 +741,6 @@ function renderBoard(state) {
     });
     cell.style.boxShadow = boxShadows.length > 0 ? boxShadows.join(', ') : 'none';
 
-    // Overlay 空间多级图层扁平化渲染引擎
-    function getFlattenedBranch(playerId) {
-      const stack = state.branchStacks[playerId];
-      if (!stack || stack.length === 0) return null;
-      const flat = Array(81).fill(null);
-      for (let layer of stack) {
-        for (let i = 0; i < 81; i++) {
-          if (layer[i] !== null) flat[i] = layer[i] === -1 ? null : layer[i];
-        }
-      }
-      return flat;
-    }
-
-    const myFlat = getFlattenedBranch(localPlayerId);
     let displayVal = state.board[index];
     
     // 自身多级分支视图覆盖
@@ -799,7 +808,8 @@ function renderBoard(state) {
     } else {
       // 🔢 数字模式逻辑：展现平滑电量进度，移除高亮
       const numCounts = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0 };
-      state.board.forEach(val => {
+      // 核心修复：基于玩家当前的有效盘面（叠加了自己所在所有分支层的试错数据）进行进度条统计
+      effectiveBoard.forEach(val => {
         if (val !== null && numCounts[val] !== undefined) {
           numCounts[val]++;
         }
