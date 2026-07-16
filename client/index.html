@@ -89,6 +89,13 @@
     /* 整个键背景作为电量槽 */
     .vk-bat-fill { position: absolute; bottom: 0; left: 0; width: 100%; height: 0%; background-color: transparent; transition: height 0.3s ease-out, background-color 0.3s; z-index: 1; }
     
+    /* 备注模式下，当前行列宫没有的候选数字高亮样式 */
+    .vk-key.candidate-highlight {
+      background-color: #e3f2fd !important; /* 极其温润的淡蓝色背景 */
+      border-color: #90caf9 !important;
+      box-shadow: 0 2px 4px rgba(25, 118, 210, 0.15), 0 2px 0 #90caf9 !important;
+    }
+
     /* 超出9个时的紫色警告特效 */
     .vk-key.over-limit { border-color: #ba68c8; animation: pulse-purple 1.5s infinite; }
     @keyframes pulse-purple { 

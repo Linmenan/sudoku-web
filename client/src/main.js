@@ -370,6 +370,8 @@ function updateModeToggleUI() {
     vkModeToggle.innerText = isNoteMode ? '📝 备注 (On)' : '📝 备注 (Off)';
     if (isNoteMode) vkModeToggle.classList.add('active'); else vkModeToggle.classList.remove('active');
   }
+  // 核心修改：切换模式时，强制立即刷新整个盘面和键盘高亮状态
+  renderBoard(store.getState());
 }
 modeToggle.addEventListener('click', () => { isNoteMode = !isNoteMode; updateModeToggleUI(); });
 if (vkModeToggle) {
@@ -606,46 +608,70 @@ function renderBoard(state) {
     // 核心体验修复：当键盘弹起时，给整个页面底部强制留出 260px 的空白缓冲，防止无法向下滚动
     document.body.style.paddingBottom = hasFocus ? '260px' : '60px';
 
-    // 统计盘面数字数量，驱动按键内的电量条
-    const numCounts = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0 };
-    state.board.forEach(val => {
-      if (val !== null && numCounts[val] !== undefined) {
-        numCounts[val]++;
+    if (isNoteMode) {
+      // 📝 备注模式逻辑：隐藏电量条，高亮当前行列宫中没有的候选数字
+      for (let i = 1; i <= 9; i++) {
+        const batFill = document.getElementById(`vk-bat-${i}`);
+        const keyBtn = document.querySelector(`.vk-key[data-key="${i}"]`);
+        
+        if (batFill && keyBtn) {
+          batFill.style.height = '0%'; // 恢复无电量格式
+          batFill.style.backgroundColor = 'transparent';
+          keyBtn.classList.remove('over-limit'); // 备注状态不显示紫色超限效果
+
+          const hasActiveFocus = (localFocusedIndex !== null && localFocusedIndex !== undefined);
+          // 判定聚焦的格子及其关联九宫格中，是否缺失当前数字 i (即 conflicts 冲突集中不包含 i)
+          if (hasActiveFocus && conflicts[localFocusedIndex] && !conflicts[localFocusedIndex].has(i)) {
+            keyBtn.classList.add('candidate-highlight');
+          } else {
+            keyBtn.classList.remove('candidate-highlight');
+          }
+        }
       }
-    });
+    } else {
+      // 🔢 数字模式逻辑：展现平滑电量进度，移除高亮
+      const numCounts = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0 };
+      state.board.forEach(val => {
+        if (val !== null && numCounts[val] !== undefined) {
+          numCounts[val]++;
+        }
+      });
 
-    for (let i = 1; i <= 9; i++) {
-      const count = numCounts[i];
-      const batFill = document.getElementById(`vk-bat-${i}`);
-      const keyBtn = document.querySelector(`.vk-key[data-key="${i}"]`);
-      
-      if (batFill && keyBtn) {
-        // 将整个按键区域作为电量条，按1到9数量进行比例高度填充，最多填充至100%
-        const heightPct = Math.min(count, 9) / 9 * 100;
-        batFill.style.height = `${heightPct}%`;
+      for (let i = 1; i <= 9; i++) {
+        const count = numCounts[i];
+        const batFill = document.getElementById(`vk-bat-${i}`);
+        const keyBtn = document.querySelector(`.vk-key[data-key="${i}"]`);
         
-        // 提前采样 9 阶平滑渐进过渡色，在保证低饱和度、高文字对比度的同时，呈现温润平滑的过渡
-        const gradientColors = [
-          'transparent', // 0 个（未填入）
-          '#ffcdd2',     // 1 个: 柔和浅红 (Pink Red)
-          '#ffd8b8',     // 2 个: 柔和浅粉橙 (Peach-Orange)
-          '#ffe0b2',     // 3 个: 柔和浅橙 (Soft Orange)
-          '#fff1b8',     // 4 个: 柔和黄橙 (Warm Yellow-Orange)
-          '#fff59d',     // 5 个: 柔和淡黄 (Pastel Yellow)
-          '#f0f4c3',     // 6 个: 柔和黄绿 (Soft Lime)
-          '#dbf2db',     // 7 个: 柔和淡薄荷绿 (Mint Leaf)
-          '#c8e6c9',     // 8 个: 柔和淡绿 (Fresh Green)
-          '#a5d6a7'      // 9 个: 柔和满绿 (Perfect Green)
-        ];
-        
-        const color = count > 9 ? gradientColors[9] : (gradientColors[count] || 'transparent');
-        batFill.style.backgroundColor = color;
+        if (batFill && keyBtn) {
+          keyBtn.classList.remove('candidate-highlight'); // 数字输入模式下禁用候选高亮
 
-        // 溢出 9 个时的紫色警告特效
-        if (count > 9) {
-          keyBtn.classList.add('over-limit');
-        } else {
-          keyBtn.classList.remove('over-limit');
+          // 将整个按键区域作为电量条，按1到9数量进行比例高度填充，最多填充至100%
+          const heightPct = Math.min(count, 9) / 9 * 100;
+          batFill.style.height = `${heightPct}%`;
+          
+          // 提前采样 9 阶平滑渐进过渡色，在保证低饱和度、高文字对比度的同时，呈现温润平滑的过渡
+          const gradientColors = [
+            'transparent', // 0 个（未填入）
+            '#ffcdd2',     // 1 个: 柔和浅红 (Pink Red)
+            '#ffd8b8',     // 2 个: 柔和浅粉橙 (Peach-Orange)
+            '#ffe0b2',     // 3 个: 柔和浅橙 (Soft Orange)
+            '#fff1b8',     // 4 个: 柔和黄橙 (Warm Yellow-Orange)
+            '#fff59d',     // 5 个: 柔和淡黄 (Pastel Yellow)
+            '#f0f4c3',     // 6 个: 柔和黄绿 (Soft Lime)
+            '#dbf2db',     // 7 个: 柔和淡薄荷绿 (Mint Leaf)
+            '#c8e6c9',     // 8 个: 柔和淡绿 (Fresh Green)
+            '#a5d6a7'      // 9 个: 柔和满绿 (Perfect Green)
+          ];
+          
+          const color = count > 9 ? gradientColors[9] : (gradientColors[count] || 'transparent');
+          batFill.style.backgroundColor = color;
+
+          // 溢出 9 个时的紫色警告特效
+          if (count > 9) {
+            keyBtn.classList.add('over-limit');
+          } else {
+            keyBtn.classList.remove('over-limit');
+          }
         }
       }
     }
