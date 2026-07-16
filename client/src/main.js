@@ -628,40 +628,127 @@ btnMerge.addEventListener('click', () => {
 
   // 存在冲突矩阵则进入 UI 挂起状态等待裁决
   if (pendingConflicts.length > 0) {
-    conflictList.innerHTML = '';
-    pendingConflicts.forEach((conflict, idx) => {
-      const row = Math.floor(conflict.index / 9) + 1;
-      const col = (conflict.index % 9) + 1;
-      conflictList.innerHTML += `
-        <div class="conflict-item">
-          <div style="font-weight: bold;">[ 坐标 第${row}行, 第${col}列 ]</div>
-          <div class="conflict-choice">
-            <label style="background: #e3f2fd;">
-              <input type="radio" name="conflict_${idx}" value="main" checked> 
-              保留主干 [${conflict.mainVal}]
-            </label>
-            <label style="background: #fff3e0;">
-              <input type="radio" name="conflict_${idx}" value="mine"> 
-              强制覆盖 [${conflict.myVal}]
-            </label>
-          </div>
-        </div>
-      `;
-    });
+    renderConflictBoard(mainBoard, pendingConflicts);
     conflictModal.style.display = 'flex';
   } else {
     executeAction({ type: 'COMMIT_MERGE', payload: { diffs: pendingSafeMerges } });
   }
 });
 
+let currentResolutions = {};
+
+function renderConflictBoard(mainBoard, conflicts) {
+  currentResolutions = {};
+  const conflictMap = {};
+  conflicts.forEach(c => {
+    conflictMap[c.index] = c;
+    currentResolutions[c.index] = null; // 初始化为未裁决
+  });
+
+  const boardDiv = document.getElementById('conflictBoard');
+  boardDiv.innerHTML = '';
+
+  for (let i = 0; i < 81; i++) {
+    const wrap = document.createElement('div');
+    wrap.className = 'cf-cell-wrap';
+    if (i % 9 === 2 || i % 9 === 5) wrap.classList.add('border-right-thick');
+    if (Math.floor(i / 9) === 2 || Math.floor(i / 9) === 5) wrap.classList.add('border-bottom-thick');
+
+    if (conflictMap[i]) {
+      const c = conflictMap[i];
+      // 对于抹除操作 (-1 或 null)，用视觉显眼的符号 'Ø' 占位代替空白
+      const myStr = c.myVal === null || c.myVal === -1 ? 'Ø' : c.myVal;
+      const mainStr = c.mainVal === null || c.mainVal === -1 ? 'Ø' : c.mainVal;
+
+      const content = document.createElement('div');
+      content.className = 'cf-content cf-interactive';
+      content.dataset.index = i;
+
+      // 组装传入侧 (Mine) 的几何碰撞块
+      const minePart = document.createElement('div');
+      minePart.className = 'cf-part cf-mine';
+      minePart.innerHTML = `<span>${myStr}</span>`;
+      minePart.addEventListener('click', (e) => {
+        e.stopPropagation();
+        resolveConflict(i, 'mine');
+      });
+
+      // 组装主干侧 (Main) 的几何碰撞块
+      const mainPart = document.createElement('div');
+      mainPart.className = 'cf-part cf-main';
+      mainPart.innerHTML = `<span>${mainStr}</span>`;
+      mainPart.addEventListener('click', (e) => {
+        e.stopPropagation();
+        resolveConflict(i, 'main');
+      });
+
+      content.appendChild(minePart);
+      content.appendChild(mainPart);
+      wrap.appendChild(content);
+    } else {
+      const content = document.createElement('div');
+      content.className = 'cf-content cf-no-conflict';
+      content.innerText = mainBoard[i] !== null ? mainBoard[i] : '';
+      wrap.appendChild(content);
+    }
+
+    boardDiv.appendChild(wrap);
+  }
+  checkAllResolved();
+}
+
+function resolveConflict(index, choice) {
+  currentResolutions[index] = choice;
+  const content = document.querySelector(`.cf-interactive[data-index="${index}"]`);
+  if (content) {
+    // 触发纯 CSS 硬件加速过渡动画
+    content.classList.remove('cf-resolved-mine', 'cf-resolved-main');
+    content.classList.add(choice === 'mine' ? 'cf-resolved-mine' : 'cf-resolved-main');
+  }
+  checkAllResolved();
+}
+
+function checkAllResolved() {
+  const total = Object.keys(currentResolutions).length;
+  const resolvedCount = Object.values(currentResolutions).filter(v => v !== null).length;
+  const allResolved = resolvedCount === total;
+  
+  if (allResolved) {
+    btnConfirmMerge.disabled = false;
+    btnConfirmMerge.style.opacity = '1';
+    btnConfirmMerge.style.cursor = 'pointer';
+    btnConfirmMerge.innerText = '确认裁决并提交';
+  } else {
+    btnConfirmMerge.disabled = true;
+    btnConfirmMerge.style.opacity = '0.5';
+    btnConfirmMerge.style.cursor = 'not-allowed';
+    btnConfirmMerge.innerText = `需解决所有冲突 (${resolvedCount}/${total})`;
+  }
+}
+
+const btnAllMine = document.getElementById('btnAllMine');
+const btnAllMain = document.getElementById('btnAllMain');
+if (btnAllMine) {
+  btnAllMine.addEventListener('click', () => {
+    Object.keys(currentResolutions).forEach(idx => resolveConflict(parseInt(idx), 'mine'));
+  });
+}
+if (btnAllMain) {
+  btnAllMain.addEventListener('click', () => {
+    Object.keys(currentResolutions).forEach(idx => resolveConflict(parseInt(idx), 'main'));
+  });
+}
+
 btnCancelMerge.addEventListener('click', () => {
   conflictModal.style.display = 'none'; 
 });
 
 btnConfirmMerge.addEventListener('click', () => {
-  pendingConflicts.forEach((conflict, idx) => {
-    const selector = document.querySelector(`input[name="conflict_${idx}"]:checked`);
-    if (selector && selector.value === 'mine') {
+  if (btnConfirmMerge.disabled) return;
+  
+  pendingConflicts.forEach((conflict) => {
+    const choice = currentResolutions[conflict.index];
+    if (choice === 'mine') {
       // 还原墓碑值为实际需要提交的内容
       const finalVal = conflict.myVal === null ? -1 : conflict.myVal;
       pendingSafeMerges.push({ index: conflict.index, value: finalVal });

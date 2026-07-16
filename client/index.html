@@ -124,6 +124,43 @@
     .vk-key.vk-delete { order: 2; grid-column: span 1; color: #d32f2f; }
     .vk-key.vk-mode { order: 3; grid-column: span 5; padding: 12px 0; background: #e0e0e0; color: #333; border-color: #bbb; box-shadow: 0 2px 0 #999; }
     .vk-key.vk-mode.active { background: #ffeb3b; color: #f57f17; border-color: #fbc02d; box-shadow: 0 2px 0 #f9a825; }
+
+    /* 冲突裁决盘面样式 */
+    #conflictBoard { display: grid; grid-template-columns: repeat(9, 1fr); background: #000; border: 2px solid #000; gap: 1px; width: 100%; margin: 10px auto; max-width: 400px; box-sizing: border-box;}
+    .cf-cell-wrap { position: relative; width: 100%; padding-bottom: 100%; background: #fff; }
+    .cf-cell-wrap.border-right-thick { border-right: 2px solid #000 !important; }
+    .cf-cell-wrap.border-bottom-thick { border-bottom: 2px solid #000 !important; }
+    
+    .cf-content { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+    .cf-no-conflict { display: flex; align-items: center; justify-content: center; font-size: 16px; color: #bdbdbd; background: #fafafa; }
+    
+    .cf-interactive { cursor: pointer; }
+    /* 核心：为确保 polygon 补间动画极致丝滑，所有状态均严格保持 4 个定点坐标 */
+    .cf-part { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; transition: all 0.4s cubic-bezier(0.25, 1, 0.5, 1); }
+    .cf-part span { position: absolute; transition: all 0.4s cubic-bezier(0.25, 1, 0.5, 1); font-weight: bold; font-size: 15px; }
+    
+    /* 初始未裁决状态：完美五五平分 */
+    .cf-mine { background: #fff3e0; color: #e65100; clip-path: polygon(0% 0%, 50% 0%, 50% 100%, 0% 100%); }
+    .cf-main { background: #e3f2fd; color: #0d47a1; clip-path: polygon(50% 0%, 100% 0%, 100% 100%, 50% 100%); }
+    
+    .cf-mine span { left: 25%; top: 50%; transform: translate(-50%, -50%); }
+    .cf-main span { left: 75%; top: 50%; transform: translate(-50%, -50%); }
+
+    /* 裁决选定传入侧 (Mine 扩张，Main 被挤压进右下角) */
+    .cf-resolved-mine .cf-mine { background: #ffe0b2; clip-path: polygon(0% 0%, 100% 0%, 40% 100%, 0% 100%); z-index: 2; box-shadow: inset 0 0 10px rgba(230,81,0,0.1); }
+    .cf-resolved-mine .cf-main { background: #f5f5f5; color: #9e9e9e; clip-path: polygon(100% 0%, 100% 0%, 100% 100%, 40% 100%); z-index: 1; }
+    .cf-resolved-mine .cf-mine span { left: 45%; top: 45%; transform: translate(-50%, -50%) scale(1.5); }
+    .cf-resolved-mine .cf-main span { left: 85%; top: 85%; transform: translate(-50%, -50%) scale(0.6); }
+
+    /* 裁决选定主干侧 (Main 扩张，Mine 被挤压进左上角) */
+    .cf-resolved-main .cf-main { background: #bbdefb; clip-path: polygon(60% 0%, 100% 0%, 100% 100%, 0% 100%); z-index: 2; box-shadow: inset 0 0 10px rgba(13,71,161,0.1); }
+    .cf-resolved-main .cf-mine { background: #f5f5f5; color: #9e9e9e; clip-path: polygon(0% 0%, 60% 0%, 0% 100%, 0% 100%); z-index: 1; }
+    .cf-resolved-main .cf-main span { left: 55%; top: 55%; transform: translate(-50%, -50%) scale(1.5); }
+    .cf-resolved-main .cf-mine span { left: 15%; top: 15%; transform: translate(-50%, -50%) scale(0.6); }
+    
+    .conflict-global-actions { display: flex; justify-content: space-between; gap: 10px; width: 100%; }
+    .conflict-global-actions button { flex: 1; padding: 8px; font-size: 14px; border-radius: 4px; border: 1px solid #ccc; background: white; cursor: pointer; transition: background 0.2s; font-weight: bold; color: #333;}
+    .conflict-global-actions button:hover { background: #f0f0f0; }
   </style>
   </head>
 <body>
@@ -245,12 +282,15 @@
   </div>
 
   <div id="conflictModal" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.6); z-index: 1001; align-items: center; justify-content: center;">
-    <div class="win-content" style="max-width: 500px; width: 90%;">
+    <div class="win-content" style="max-width: 500px; width: 95%; padding: 15px;">
       <h2 style="color: #d32f2f; margin-top: 0;">⚠️ 发现合并冲突！</h2>
-      <p style="font-size: 14px; color: #555;">主干盘面已被他人修改，与你的局部分支存在逻辑重叠，请手动裁决：</p>
-      <div id="conflictList" style="max-height: 250px; overflow-y: auto; margin: 15px 0; text-align: left; background: #fafafa; border: 1px solid #eee; padding: 10px; border-radius: 6px;">
-        </div>
-      <div style="display: flex; justify-content: space-between; gap: 10px;">
+      <p style="font-size: 14px; color: #555; margin-bottom: 15px;">主干已被他人修改。点击格子左右半区完成高亮挤压裁决，<span style="color: #e65100; font-weight:bold;">橙侧(传入)</span> / <span style="color: #0d47a1; font-weight:bold;">蓝侧(主干)</span>：</p>
+      <div class="conflict-global-actions">
+        <button id="btnAllMine">👈 全部保留传入</button>
+        <button id="btnAllMain">👉 全部保留主干</button>
+      </div>
+      <div id="conflictBoard"></div>
+      <div style="display: flex; justify-content: space-between; gap: 10px; margin-top: 15px;">
         <button id="btnCancelMerge" style="flex: 1; padding: 10px; background: #9e9e9e; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">放弃合并</button>
         <button id="btnConfirmMerge" style="flex: 1; padding: 10px; background: #1976d2; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">确认裁决并提交</button>
       </div>
