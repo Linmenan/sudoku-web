@@ -14,6 +14,7 @@ export const createStore = (onStateChange = () => {}) => {
     cellOwners: Array(81).fill(null),
     chatMessages: [], // 新增：保存房间聊天记录
     checkedCells: Array(81).fill(false), // 新增：保存单元格检查标记
+    branchStacks: {}, // 新增：支持多级嵌套分支的栈架构 { playerId: [layer1, layer2, ...] }
   };
 
   const getRowColGrid = (index) => {
@@ -34,19 +35,72 @@ export const createStore = (onStateChange = () => {}) => {
         case 'FILL_NUM': {
           const { index, value } = action.payload;
           if (state.phase === 'PLAYING' && state.locked[index]) break;
-          // 如果填入的值和原来一样，不执行任何操作（避免重复触发）
+          
+          // 多级分支拦截引擎：若存在分支栈，则将操作压入最顶层的私有图层
+          if (state.branchStacks[fromPlayerId] && state.branchStacks[fromPlayerId].length > 0) {
+             const stack = state.branchStacks[fromPlayerId];
+             const topLayer = stack[stack.length - 1];
+             const branchVal = value === null ? -1 : value; // 用 -1 作为删除的墓碑标记，以遮蔽父层数据
+             if (topLayer[index] === branchVal) break;
+             topLayer[index] = branchVal;
+             break;
+          }
+
           if (state.board[index] === value) break; 
           
           state.board[index] = value;
-          state.checkedCells[index] = false; // 当单元格数字发生改变时，自动将“检查过”标记移除
-
-          // 核心机制：记录盘面贡献者
+          state.checkedCells[index] = false;
           if (state.phase === 'PLAYING') {
             state.cellOwners[index] = value !== null ? fromPlayerId : null;
           }
-
-          // 移除填入数字时对关联单元格 notes 数组的物理删除。
-          // 改在前端 renderBoard 时动态计算冲突来临时隐藏，从而实现当数字被删除时，原笔记会自动恢复。
+          break;
+        }
+        case 'CREATE_BRANCH': {
+          // 插旗：推入一个新的透明图层
+          if (!state.branchStacks[fromPlayerId]) state.branchStacks[fromPlayerId] = [];
+          state.branchStacks[fromPlayerId].push(Array(81).fill(null));
+          break;
+        }
+        case 'REVERT_BRANCH': {
+          // 拔旗：弹出最顶层的图层，丢弃当层尝试
+          if (state.branchStacks[fromPlayerId] && state.branchStacks[fromPlayerId].length > 0) {
+            state.branchStacks[fromPlayerId].pop();
+            if (state.branchStacks[fromPlayerId].length === 0) {
+              delete state.branchStacks[fromPlayerId];
+            }
+          }
+          break;
+        }
+        case 'SQUASH_BRANCH': {
+          // 向下合并：将最顶层图层压缩合并到它的父图层中（无冲突合并）
+          const stack = state.branchStacks[fromPlayerId];
+          if (stack && stack.length > 1) {
+            const topLayer = stack.pop();
+            const parentLayer = stack[stack.length - 1];
+            for (let i = 0; i < 81; i++) {
+              if (topLayer[i] !== null) parentLayer[i] = topLayer[i];
+            }
+          }
+          break;
+        }
+        case 'COMMIT_MERGE': {
+          // 最终合并至主干
+          const { diffs } = action.payload;
+          diffs.forEach(({ index, value }) => {
+            if (!state.locked[index]) {
+              const finalVal = value === -1 ? null : value;
+              state.board[index] = finalVal;
+              state.checkedCells[index] = false;
+              state.cellOwners[index] = finalVal !== null ? fromPlayerId : null;
+            }
+          });
+          // 并入主干后，销毁仅存的最后一层分支
+          if (state.branchStacks[fromPlayerId]) {
+            state.branchStacks[fromPlayerId].pop();
+            if (state.branchStacks[fromPlayerId].length === 0) {
+              delete state.branchStacks[fromPlayerId];
+            }
+          }
           break;
         }
         case 'TOGGLE_NOTE': {
@@ -93,6 +147,7 @@ export const createStore = (onStateChange = () => {}) => {
             state.board.fill(null);
             state.notes.forEach(note => note.length = 0);
             state.checkedCells.fill(false);
+            state.branchStacks = {};
           }
           break;
         }
@@ -103,6 +158,7 @@ export const createStore = (onStateChange = () => {}) => {
             state.board = [...newBoard];
             state.notes.forEach(note => note.length = 0);
             state.checkedCells.fill(false);
+            state.branchStacks = {};
           }
           break;
         }

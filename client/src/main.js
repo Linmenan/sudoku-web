@@ -20,6 +20,16 @@ const btnLeave = document.getElementById('btnLeave');
 const winModal = document.getElementById('winModal');
 const scoreBoard = document.getElementById('scoreBoard');
 
+// 分支与冲突弹窗节点映射
+const branchControls = document.getElementById('branchControls');
+const btnBranch = document.getElementById('btnBranch');
+const btnMerge = document.getElementById('btnMerge');
+const btnRevert = document.getElementById('btnRevert');
+const conflictModal = document.getElementById('conflictModal');
+const conflictList = document.getElementById('conflictList');
+const btnCancelMerge = document.getElementById('btnCancelMerge');
+const btnConfirmMerge = document.getElementById('btnConfirmMerge');
+
 const virtualKeyboard = document.getElementById('virtualKeyboard');
 const vkModeToggle = document.getElementById('vkModeToggle');
 const isPrivateCheck = document.getElementById('isPrivateCheck');
@@ -538,14 +548,106 @@ btnClear.addEventListener('click', () => {
   }
 });
 
+// --- Git-like 多级嵌套分支控制流与冲突裁决逻辑 ---
+let pendingSafeMerges = []; 
+let pendingConflicts = [];
+
+btnBranch.addEventListener('click', () => {
+  executeAction({ type: 'CREATE_BRANCH' });
+});
+
+btnRevert.addEventListener('click', () => {
+  const stack = store.getState().branchStacks[localPlayerId];
+  const depth = stack ? stack.length : 0;
+  if (confirm(`🗑️ 确定要拔旗，并丢弃您在第 ${depth} 层局部分支中探索的所有数据吗？`)) {
+    executeAction({ type: 'REVERT_BRANCH' });
+  }
+});
+
+btnMerge.addEventListener('click', () => {
+  const state = store.getState();
+  const stack = state.branchStacks[localPlayerId];
+  if (!stack || stack.length === 0) return;
+
+  // 如果处于多级嵌套深处，执行无感向下压缩合并（Squash），由于是玩家私有沙盒层级融合，绝对不会产生多人冲突
+  if (stack.length > 1) {
+    executeAction({ type: 'SQUASH_BRANCH' });
+    return;
+  }
+
+  // 如果已经是最后一层（直接对接主干），则触发真实的多人 Diff 对比与冲突捕捉机制
+  const myBranch = stack[0];
+  const mainBoard = state.board;
+
+  pendingSafeMerges = [];
+  pendingConflicts = [];
+
+  // 基础 Diff 检索引擎：提取变化矩阵并过滤逻辑冲突
+  for (let i = 0; i < 81; i++) {
+    if (myBranch[i] !== null) {
+      if (mainBoard[i] !== null && mainBoard[i] !== myBranch[i]) {
+        pendingConflicts.push({ index: i, myVal: myBranch[i], mainVal: mainBoard[i] });
+      } else {
+        pendingSafeMerges.push({ index: i, value: myBranch[i] });
+      }
+    }
+  }
+
+  // 存在冲突矩阵则进入 UI 挂起状态等待裁决
+  if (pendingConflicts.length > 0) {
+    conflictList.innerHTML = '';
+    pendingConflicts.forEach((conflict, idx) => {
+      const row = Math.floor(conflict.index / 9) + 1;
+      const col = (conflict.index % 9) + 1;
+      conflictList.innerHTML += `
+        <div class="conflict-item">
+          <div style="font-weight: bold;">[ 坐标 第${row}行, 第${col}列 ]</div>
+          <div class="conflict-choice">
+            <label style="background: #e3f2fd;">
+              <input type="radio" name="conflict_${idx}" value="main" checked> 
+              保留主干 [${conflict.mainVal}]
+            </label>
+            <label style="background: #fff3e0;">
+              <input type="radio" name="conflict_${idx}" value="mine"> 
+              强制覆盖 [${conflict.myVal}]
+            </label>
+          </div>
+        </div>
+      `;
+    });
+    conflictModal.style.display = 'flex';
+  } else {
+    executeAction({ type: 'COMMIT_MERGE', payload: { diffs: pendingSafeMerges } });
+  }
+});
+
+btnCancelMerge.addEventListener('click', () => {
+  conflictModal.style.display = 'none'; 
+});
+
+btnConfirmMerge.addEventListener('click', () => {
+  pendingConflicts.forEach((conflict, idx) => {
+    const selector = document.querySelector(`input[name="conflict_${idx}"]:checked`);
+    if (selector && selector.value === 'mine') {
+      // 还原墓碑值为实际需要提交的内容
+      const finalVal = conflict.myVal === null ? -1 : conflict.myVal;
+      pendingSafeMerges.push({ index: conflict.index, value: finalVal });
+    }
+  });
+  executeAction({ type: 'COMMIT_MERGE', payload: { diffs: pendingSafeMerges } });
+  conflictModal.style.display = 'none';
+});
+
 const getRowColGrid = (index) => {
   const row = Math.floor(index / 9); const col = index % 9;
   return { row, col, grid: Math.floor(row / 3) * 3 + Math.floor(col / 3) };
 };
 
 function renderBoard(state) {
-  // 核心控制：当且仅当游戏正式开始（PLAYING阶段），才渲染玩家面板及备注控制条
-  document.getElementById('inGameInfoBar').style.display = state.phase === 'PLAYING' ? 'flex' : 'none';
+  // 核心控制：当且仅当游戏正式开始（PLAYING阶段），才渲染玩家面板及分支沙盒组件
+  const isPlaying = state.phase === 'PLAYING';
+  document.getElementById('inGameInfoBar').style.display = isPlaying ? 'flex' : 'none';
+  if (branchControls) branchControls.style.display = isPlaying ? 'flex' : 'none';
 
   let newPlayerHtml = '';
   Object.values(state.players).forEach(player => {
@@ -580,6 +682,7 @@ function renderBoard(state) {
     if (state.checkedCells && state.checkedCells[index]) className += ' checked';
     if (highlightedNum !== null && state.board[index] === highlightedNum) className += ' number-highlight';
     cell.className = className;
+    cell.style.color = ''; // 重置字体颜色，防止沙盒模式的样式遗留污染主干
     
     let boxShadows = [];
     Object.entries(state.focuses).forEach(([playerId, focusedIndex]) => {
@@ -589,8 +692,47 @@ function renderBoard(state) {
     });
     cell.style.boxShadow = boxShadows.length > 0 ? boxShadows.join(', ') : 'none';
 
-    if (state.board[index] !== null) {
-      cell.innerHTML = state.board[index];
+    // Overlay 空间多级图层扁平化渲染引擎
+    function getFlattenedBranch(playerId) {
+      const stack = state.branchStacks[playerId];
+      if (!stack || stack.length === 0) return null;
+      const flat = Array(81).fill(null);
+      for (let layer of stack) {
+        for (let i = 0; i < 81; i++) {
+          if (layer[i] !== null) flat[i] = layer[i] === -1 ? null : layer[i];
+        }
+      }
+      return flat;
+    }
+
+    const myFlat = getFlattenedBranch(localPlayerId);
+    let displayVal = state.board[index];
+    
+    // 自身多级分支视图覆盖
+    if (myFlat && myFlat[index] !== null) {
+      displayVal = myFlat[index];
+      cell.style.color = '#f57c00'; // 沙盒状态下的暂存数字使用显眼橙色警告标示
+    }
+
+    // 幽灵投影机制：如果是主干中的空位，扫描是否正有他人在自己的多级沙盒内对其进行操作
+    let ghostHtml = '';
+    if (displayVal === null) {
+       for (const pId of Object.keys(state.players)) {
+          if (pId === localPlayerId) continue;
+          const otherFlat = getFlattenedBranch(pId);
+          // 渲染他人的非空记录，右上角打上思考标识
+          if (otherFlat && otherFlat[index] !== null) {
+             const pColor = state.players[pId] ? state.players[pId].color : '#ccc';
+             ghostHtml = `<div class="ghost-num" style="color: ${pColor}">🤔${otherFlat[index]}</div>`;
+             break; // 防止重叠，只捕获第一个扫描到的动作投影
+          }
+       }
+    }
+
+    if (displayVal !== null) {
+      cell.innerHTML = displayVal;
+    } else if (ghostHtml) {
+      cell.innerHTML = ghostHtml;
     } else {
       const visibleNotes = state.notes[index].filter(n => !conflicts[index].has(n));
       if (visibleNotes.length > 0) {
@@ -696,6 +838,29 @@ function renderBoard(state) {
       chatMessagesDiv.innerHTML = ''; chatMessagesDiv.dataset.lastMsgId = '';
     }
   } else { chatPanel.style.display = 'none'; }
+  
+  // 触发 UI 渲染时一并更新多级分支面板信息
+  updateBranchUI(state);
+}
+
+// 将 Git 侧边控制台的状态更新抽离
+function updateBranchUI(state) {
+  const stack = state.branchStacks[localPlayerId];
+  const depth = stack ? stack.length : 0;
+  
+  if (depth === 0) {
+    if(btnBranch) btnBranch.innerText = '🚩 插旗';
+    if(btnMerge) btnMerge.style.display = 'none';
+    if(btnRevert) btnRevert.style.display = 'none';
+    document.body.style.boxShadow = 'none';
+  } else {
+    if(btnBranch) btnBranch.innerText = `🚩 再次插旗 (当前嵌套层级: ${depth})`;
+    if(btnMerge) btnMerge.style.display = 'block';
+    if(btnRevert) btnRevert.style.display = 'block';
+    if(btnMerge) btnMerge.innerText = depth > 1 ? '🚀 向上层合并' : '🚀 最终合并至主干';
+    if(btnRevert) btnRevert.innerText = `🗑️ 拔掉第 ${depth} 层旗`;
+    document.body.style.boxShadow = `inset 0 0 ${10 + depth * 8}px rgba(25, 118, 210, 0.5)`;
+  }
 }
 
 btnLeave.addEventListener('click', () => {
