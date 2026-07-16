@@ -74,6 +74,11 @@
     /* 幽灵图层数字样式（主干上的其他玩家可见） */
     .ghost-num { position: absolute; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; opacity: 0.35; font-size: 20px; pointer-events: none; z-index: 1; }
     
+    /* 时间轴滚动条美化 */
+    #gitGraphContainer::-webkit-scrollbar { height: 6px; }
+    #gitGraphContainer::-webkit-scrollbar-thumb { background-color: #ccc; border-radius: 3px; }
+    #gitGraphContainer::-webkit-scrollbar-track { background: transparent; }
+
     /* 最终通关盘面网格与格子样式 */
     #finalBoard { display: grid; grid-template-columns: repeat(9, 30px); background: #000; border: 2px solid #000; gap: 1px; width: max-content; margin: 15px auto; }
     .final-cell { width: 30px; height: 30px; background: white; display: flex; align-items: center; justify-content: center; font-size: 16px; user-select: none; box-sizing: border-box; position: relative; font-weight: bold; color: #1976d2; }
@@ -210,6 +215,19 @@
     </div>
   </div>
 
+  <div id="branchUIContainer" style="display: none; width: 94%; max-width: 600px; margin-bottom: 15px; background: white; padding: 12px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); box-sizing: border-box; flex-direction: column; gap: 10px;">
+    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+      <div style="font-size: 15px; font-weight: bold; color: #333; display: flex; align-items: center; gap: 5px;">🌿 探索时间轴</div>
+      <div id="branchControls" style="display: flex; gap: 8px;">
+        <button id="btnBranch" title="插旗：创建个人试错分支" style="padding: 6px 12px; border: 1px solid #1976d2; background: #e3f2fd; color: #1976d2; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 13px;">🚩 插旗</button>
+        <button id="btnMerge" title="合并：向下层或主干合并" style="display: none; padding: 6px 12px; border: 1px solid #388e3c; background: #e8f5e9; color: #388e3c; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 13px;">🚀 合并</button>
+        <button id="btnRevert" title="拔旗：丢弃当前分支" style="display: none; padding: 6px 12px; border: 1px solid #d32f2f; background: #ffebee; color: #d32f2f; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 13px;">🗑️ 拔旗</button>
+      </div>
+    </div>
+    <div id="gitGraphContainer" style="display: flex; align-items: center; overflow-x: auto; padding: 10px 5px; gap: 0; min-height: 45px; scroll-behavior: smooth; border-top: 1px dashed #eee; margin-top: 5px; padding-top: 15px; user-select: none;">
+      </div>
+  </div>
+
   <div id="board"></div>
 
   <div id="virtualKeyboard">
@@ -224,13 +242,6 @@
     <div class="vk-key" data-key="9"><span>9</span><div class="vk-bat-fill" id="vk-bat-9"></div></div>
     <div class="vk-key vk-wide vk-mode" id="vkModeToggle">📝 备注 (Off)</div>
     <div class="vk-key vk-wide vk-delete" data-key="Delete">删除</div>
-  </div>
-
-  <div id="branchControls" style="display: none; position: fixed; right: 10px; top: 50%; transform: translateY(-50%); background: white; padding: 10px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.2); flex-direction: column; gap: 10px; z-index: 100;">
-    <div style="font-size: 12px; font-weight: bold; text-align: center; color: #666; margin-bottom: 5px;">沙盒分支</div>
-    <button id="btnBranch" title="插旗：创建个人试错分支" style="padding: 8px; border: 1px solid #1976d2; background: #e3f2fd; color: #1976d2; border-radius: 4px; cursor: pointer; font-weight: bold;">🚩 插旗</button>
-    <button id="btnMerge" title="合并：将分支写入主干" style="display: none; padding: 8px; border: 1px solid #388e3c; background: #e8f5e9; color: #388e3c; border-radius: 4px; cursor: pointer; font-weight: bold;">🚀 合并</button>
-    <button id="btnRevert" title="拔旗：丢弃当前分支" style="display: none; padding: 8px; border: 1px solid #d32f2f; background: #ffebee; color: #d32f2f; border-radius: 4px; cursor: pointer; font-weight: bold;">🗑️ 拔旗</button>
   </div>
 
   <div id="conflictModal" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.6); z-index: 1001; align-items: center; justify-content: center;">

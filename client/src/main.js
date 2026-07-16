@@ -21,11 +21,41 @@ const winModal = document.getElementById('winModal');
 const scoreBoard = document.getElementById('scoreBoard');
 
 // 分支与冲突弹窗节点映射
+const branchUIContainer = document.getElementById('branchUIContainer');
+const gitGraphContainer = document.getElementById('gitGraphContainer');
 const branchControls = document.getElementById('branchControls');
 const btnBranch = document.getElementById('btnBranch');
 const btnMerge = document.getElementById('btnMerge');
 const btnRevert = document.getElementById('btnRevert');
 const conflictModal = document.getElementById('conflictModal');
+
+// 为 Git Graph 容器注册鼠标横向拖拽滑动事件（提升 PC 端体验）
+if (gitGraphContainer) {
+  let isDown = false;
+  let startX;
+  let scrollLeft;
+  gitGraphContainer.style.cursor = 'grab';
+  gitGraphContainer.addEventListener('mousedown', (e) => {
+    isDown = true;
+    gitGraphContainer.style.cursor = 'grabbing';
+    startX = e.pageX - gitGraphContainer.offsetLeft;
+    scrollLeft = gitGraphContainer.scrollLeft;
+  });
+  gitGraphContainer.addEventListener('mouseleave', () => {
+    isDown = false;
+    gitGraphContainer.style.cursor = 'grab';
+  });
+  gitGraphContainer.addEventListener('mouseup', () => {
+    isDown = false;
+    gitGraphContainer.style.cursor = 'grab';
+  });
+  gitGraphContainer.addEventListener('mousemove', (e) => {
+    if (!isDown) return;
+    e.preventDefault();
+    const x = e.pageX - gitGraphContainer.offsetLeft;
+    gitGraphContainer.scrollLeft = scrollLeft - (x - startX) * 1.5;
+  });
+}
 const conflictList = document.getElementById('conflictList');
 const btnCancelMerge = document.getElementById('btnCancelMerge');
 const btnConfirmMerge = document.getElementById('btnConfirmMerge');
@@ -647,7 +677,7 @@ function renderBoard(state) {
   // 核心控制：当且仅当游戏正式开始（PLAYING阶段），才渲染玩家面板及分支沙盒组件
   const isPlaying = state.phase === 'PLAYING';
   document.getElementById('inGameInfoBar').style.display = isPlaying ? 'flex' : 'none';
-  if (branchControls) branchControls.style.display = isPlaying ? 'flex' : 'none';
+  if (branchUIContainer) branchUIContainer.style.display = isPlaying ? 'flex' : 'none';
 
   let newPlayerHtml = '';
   Object.values(state.players).forEach(player => {
@@ -843,7 +873,48 @@ function renderBoard(state) {
   updateBranchUI(state);
 }
 
-// 将 Git 侧边控制台的状态更新抽离
+// 渲染类似于 GitGraph 的时间轴
+function renderGitGraph(depth) {
+  if (!gitGraphContainer) return;
+  let html = '';
+  const colorMain = '#1976d2';
+  const colorBranch = '#f57c00';
+  
+  // 渲染主干节点 (Root)
+  html += `
+    <div style="display: flex; flex-direction: column; align-items: center; position: relative; flex-shrink: 0; pointer-events: none;">
+      <div style="width: 18px; height: 18px; border-radius: 50%; background: ${depth === 0 ? colorMain : '#ccc'}; border: 3px solid ${depth === 0 ? '#0d47a1' : '#aaa'}; z-index: 2; transition: all 0.3s;"></div>
+      <div style="font-size: 11px; margin-top: 6px; font-weight: ${depth === 0 ? 'bold' : 'normal'}; color: ${depth === 0 ? '#1976d2' : '#666'};">主干</div>
+    </div>
+  `;
+  
+  // 渲染分支节点与连线
+  for (let i = 1; i <= depth; i++) {
+    const isActive = (i === depth);
+    const color = isActive ? colorBranch : '#ffcc80';
+    const border = isActive ? '#e65100' : '#ffa726';
+    const textColor = isActive ? '#e65100' : '#888';
+    
+    // 连线
+    html += `<div style="height: 4px; width: 40px; background: ${color}; margin-top: -20px; z-index: 1; flex-shrink: 0; transition: all 0.3s; pointer-events: none;"></div>`;
+    
+    // 节点
+    html += `
+      <div style="display: flex; flex-direction: column; align-items: center; position: relative; flex-shrink: 0; pointer-events: none;">
+        <div style="width: 18px; height: 18px; border-radius: 50%; background: ${color}; border: 3px solid ${border}; z-index: 2; transition: all 0.3s;"></div>
+        <div style="font-size: 11px; margin-top: 6px; font-weight: ${isActive ? 'bold' : 'normal'}; color: ${textColor}; white-space: nowrap;">层级 ${i}</div>
+      </div>
+    `;
+  }
+  
+  gitGraphContainer.innerHTML = html;
+  // 节点渲染完成后，平滑滚动到最右侧显示最新的分支节点
+  setTimeout(() => {
+    gitGraphContainer.scrollTo({ left: gitGraphContainer.scrollWidth, behavior: 'smooth' });
+  }, 50);
+}
+
+// 将 Git 控制台的状态更新抽离
 function updateBranchUI(state) {
   const stack = state.branchStacks[localPlayerId];
   const depth = stack ? stack.length : 0;
@@ -854,13 +925,14 @@ function updateBranchUI(state) {
     if(btnRevert) btnRevert.style.display = 'none';
     document.body.style.boxShadow = 'none';
   } else {
-    if(btnBranch) btnBranch.innerText = `🚩 再次插旗 (当前嵌套层级: ${depth})`;
+    if(btnBranch) btnBranch.innerText = `🚩 嵌套插旗 (第 ${depth} 层)`;
     if(btnMerge) btnMerge.style.display = 'block';
     if(btnRevert) btnRevert.style.display = 'block';
-    if(btnMerge) btnMerge.innerText = depth > 1 ? '🚀 向上层合并' : '🚀 最终合并至主干';
-    if(btnRevert) btnRevert.innerText = `🗑️ 拔掉第 ${depth} 层旗`;
+    if(btnMerge) btnMerge.innerText = depth > 1 ? '🚀 向下层合并' : '🚀 合并至主干';
+    if(btnRevert) btnRevert.innerText = `🗑️ 拔旗 (层 ${depth})`;
     document.body.style.boxShadow = `inset 0 0 ${10 + depth * 8}px rgba(25, 118, 210, 0.5)`;
   }
+  renderGitGraph(depth); // 驱动动画时间轴
 }
 
 btnLeave.addEventListener('click', () => {
