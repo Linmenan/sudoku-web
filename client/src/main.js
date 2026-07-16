@@ -585,6 +585,7 @@ let pendingSafeMerges = [];
 let pendingConflicts = [];
 
 btnBranch.addEventListener('click', () => {
+  if (btnBranch.disabled) return; // 拦截被禁用的点击
   executeAction({ type: 'CREATE_BRANCH' });
 });
 
@@ -896,44 +897,56 @@ function renderBoard(state) {
   updateBranchUI(state);
 }
 
-// 渲染类似于 GitGraph 的时间轴
-function renderGitGraph(depth) {
+// 渲染类似于 GitGraph 的全局拓扑时间轴
+function renderGitGraph(state) {
   if (!gitGraphContainer) return;
   let html = '';
   const colorMain = '#1976d2';
-  const colorBranch = '#f57c00';
   
-  // 渲染主干节点 (Root)
+  // 第1行：渲染粗壮的主干线路
   html += `
-    <div style="display: flex; flex-direction: column; align-items: center; position: relative; flex-shrink: 0; pointer-events: none;">
-      <div style="width: 18px; height: 18px; border-radius: 50%; background: ${depth === 0 ? colorMain : '#ccc'}; border: 3px solid ${depth === 0 ? '#0d47a1' : '#aaa'}; z-index: 2; transition: all 0.3s;"></div>
-      <div style="font-size: 11px; margin-top: 6px; font-weight: ${depth === 0 ? 'bold' : 'normal'}; color: ${depth === 0 ? '#1976d2' : '#666'};">主干</div>
+    <div style="display: flex; align-items: center; flex-shrink: 0; position: relative;">
+      <div style="width: 20px; height: 20px; border-radius: 50%; background: ${colorMain}; border: 3px solid #0d47a1; z-index: 2;"></div>
+      <div style="font-size: 13px; margin-left: 8px; font-weight: bold; color: ${colorMain}; white-space: nowrap;">🎯 主干盘面</div>
+      <div style="flex-grow: 1; height: 4px; background: ${colorMain}; min-width: 200px; margin-left: 10px; border-radius: 2px;"></div>
     </div>
   `;
   
-  // 渲染分支节点与连线
-  for (let i = 1; i <= depth; i++) {
-    const isActive = (i === depth);
-    const color = isActive ? colorBranch : '#ffcc80';
-    const border = isActive ? '#e65100' : '#ffa726';
-    const textColor = isActive ? '#e65100' : '#888';
-    
-    // 连线
-    html += `<div style="height: 4px; width: 40px; background: ${color}; margin-top: -20px; z-index: 1; flex-shrink: 0; transition: all 0.3s; pointer-events: none;"></div>`;
-    
-    // 节点
+  // 第2-N行：渲染全房间所有正在探索的分支栈
+  const activeBranches = Object.entries(state.branchStacks || {}).filter(([_, stack]) => stack && stack.length > 0);
+  
+  activeBranches.forEach(([pId, stack]) => {
+    const pInfo = state.players[pId] || { name: '已离开玩家', color: '#999' };
+    const pColor = pInfo.color;
+    const isMe = pId === localPlayerId;
+
     html += `
-      <div style="display: flex; flex-direction: column; align-items: center; position: relative; flex-shrink: 0; pointer-events: none;">
-        <div style="width: 18px; height: 18px; border-radius: 50%; background: ${color}; border: 3px solid ${border}; z-index: 2; transition: all 0.3s;"></div>
-        <div style="font-size: 11px; margin-top: 6px; font-weight: ${isActive ? 'bold' : 'normal'}; color: ${textColor}; white-space: nowrap;">层级 ${i}</div>
-      </div>
+      <div style="display: flex; align-items: center; position: relative; padding-left: 10px; flex-shrink: 0; margin-top: -10px;">
+        <div style="position: absolute; left: 10px; top: -20px; width: 24px; height: 30px; border-left: 3px solid ${pColor}; border-bottom: 3px solid ${pColor}; border-bottom-left-radius: 8px; z-index: 1;"></div>
+        <div style="display: flex; align-items: center; margin-left: 28px;">
     `;
-  }
+    
+    stack.forEach((layer, index) => {
+      if (index > 0) {
+        html += `<div style="width: 35px; height: 3px; background: ${pColor}; flex-shrink: 0;"></div>`;
+      }
+      const isLatest = index === stack.length - 1;
+      html += `
+        <div style="display: flex; flex-direction: column; align-items: center; position: relative; flex-shrink: 0; pointer-events: none;">
+          <div style="width: 14px; height: 14px; border-radius: 50%; background: #fff; border: 3px solid ${pColor}; z-index: 2; box-shadow: 0 0 0 2px #fff;"></div>
+          <div style="position: absolute; top: 22px; font-size: 11px; color: ${pColor}; white-space: nowrap; font-weight: ${isLatest ? 'bold' : 'normal'};">
+            ${isLatest ? `👤${pInfo.name} (层${index + 1})` : `层${index + 1}`}
+          </div>
+        </div>
+      `;
+    });
+    html += `</div></div>`;
+  });
   
   gitGraphContainer.innerHTML = html;
-  // 节点渲染完成后，平滑滚动到最右侧显示最新的分支节点
+  // 节点渲染完成后，平滑滚动让整体结构尽收眼底
   setTimeout(() => {
-    gitGraphContainer.scrollTo({ left: gitGraphContainer.scrollWidth, behavior: 'smooth' });
+    gitGraphContainer.scrollTo({ left: 0, top: gitGraphContainer.scrollHeight, behavior: 'smooth' });
   }, 50);
 }
 
@@ -942,20 +955,39 @@ function updateBranchUI(state) {
   const stack = state.branchStacks[localPlayerId];
   const depth = stack ? stack.length : 0;
   
+  // 分支有效性查重引擎：如果当前层的差异数组中完全没有内容，说明玩家还没探索，禁止套娃插旗
+  let canBranch = true;
+  if (depth > 0) {
+    const topLayer = stack[depth - 1];
+    // 只要不是全空（填入或删除-1），就代表局面发生了变动
+    canBranch = topLayer.some(v => v !== null); 
+  }
+  
   if (depth === 0) {
-    if(btnBranch) btnBranch.innerText = '🚩 插旗';
+    if(btnBranch) {
+      btnBranch.innerText = '🚩 插旗';
+      btnBranch.disabled = false;
+      btnBranch.style.opacity = '1';
+      btnBranch.style.cursor = 'pointer';
+    }
     if(btnMerge) btnMerge.style.display = 'none';
     if(btnRevert) btnRevert.style.display = 'none';
     document.body.style.boxShadow = 'none';
   } else {
-    if(btnBranch) btnBranch.innerText = `🚩 嵌套插旗 (第 ${depth} 层)`;
+    if(btnBranch) {
+      btnBranch.innerText = `🚩 嵌套插旗 (第 ${depth} 层)`;
+      btnBranch.disabled = !canBranch;
+      btnBranch.style.opacity = canBranch ? '1' : '0.4';
+      btnBranch.style.cursor = canBranch ? 'pointer' : 'not-allowed';
+      btnBranch.title = canBranch ? '在当前状态上再分化一层沙盒' : '禁止空操作：请先在当前层改变盘面再插旗';
+    }
     if(btnMerge) btnMerge.style.display = 'block';
     if(btnRevert) btnRevert.style.display = 'block';
     if(btnMerge) btnMerge.innerText = depth > 1 ? '🚀 向下层合并' : '🚀 合并至主干';
     if(btnRevert) btnRevert.innerText = `🗑️ 拔旗 (层 ${depth})`;
     document.body.style.boxShadow = `inset 0 0 ${10 + depth * 8}px rgba(25, 118, 210, 0.5)`;
   }
-  renderGitGraph(depth); // 驱动动画时间轴
+  renderGitGraph(state); // 驱动全局动画时间轴
 }
 
 btnLeave.addEventListener('click', () => {
