@@ -493,6 +493,33 @@ function triggerWinSequence(state) {
     const p = state.players[id];
     scoreBoard.innerHTML += `<div class="score-item" style="color: ${p.color}"><span>${p.name}</span><span>${scores[id]} 格</span></div>`;
   });
+
+  // 动态生成通关最终盘面
+  const finalBoardDiv = document.getElementById('finalBoard');
+  if (finalBoardDiv) {
+    finalBoardDiv.innerHTML = '';
+    for (let i = 0; i < 81; i++) {
+      const cell = document.createElement('div');
+      cell.className = 'final-cell';
+      if (i % 9 === 2 || i % 9 === 5) cell.classList.add('border-right-thick');
+      if (Math.floor(i / 9) === 2 || Math.floor(i / 9) === 5) cell.classList.add('border-bottom-thick');
+      
+      if (state.locked[i]) {
+        cell.classList.add('locked');
+        cell.innerHTML = state.board[i];
+      } else {
+        cell.innerHTML = state.board[i] !== null ? state.board[i] : '';
+        const ownerId = state.cellOwners[i];
+        if (ownerId && state.players[ownerId]) {
+          // 非题面数字按照贡献该格子的玩家颜色进行背景填充，字体颜色设为白色以保持高对比度
+          cell.style.backgroundColor = state.players[ownerId].color;
+          cell.style.color = '#ffffff';
+        }
+      }
+      finalBoardDiv.appendChild(cell);
+    }
+  }
+
   winModal.style.display = 'flex';
 }
 
@@ -578,6 +605,50 @@ function renderBoard(state) {
     
     // 核心体验修复：当键盘弹起时，给整个页面底部强制留出 260px 的空白缓冲，防止无法向下滚动
     document.body.style.paddingBottom = hasFocus ? '260px' : '60px';
+
+    // 统计盘面数字数量，驱动按键内的电量条
+    const numCounts = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0 };
+    state.board.forEach(val => {
+      if (val !== null && numCounts[val] !== undefined) {
+        numCounts[val]++;
+      }
+    });
+
+    for (let i = 1; i <= 9; i++) {
+      const count = numCounts[i];
+      const batFill = document.getElementById(`vk-bat-${i}`);
+      const keyBtn = document.querySelector(`.vk-key[data-key="${i}"]`);
+      
+      if (batFill && keyBtn) {
+        // 将整个按键区域作为电量条，按1到9数量进行比例高度填充，最多填充至100%
+        const heightPct = Math.min(count, 9) / 9 * 100;
+        batFill.style.height = `${heightPct}%`;
+        
+        // 提前采样 9 阶平滑渐进过渡色，在保证低饱和度、高文字对比度的同时，呈现温润平滑的过渡
+        const gradientColors = [
+          'transparent', // 0 个（未填入）
+          '#ffcdd2',     // 1 个: 柔和浅红 (Pink Red)
+          '#ffd8b8',     // 2 个: 柔和浅粉橙 (Peach-Orange)
+          '#ffe0b2',     // 3 个: 柔和浅橙 (Soft Orange)
+          '#fff1b8',     // 4 个: 柔和黄橙 (Warm Yellow-Orange)
+          '#fff59d',     // 5 个: 柔和淡黄 (Pastel Yellow)
+          '#f0f4c3',     // 6 个: 柔和黄绿 (Soft Lime)
+          '#dbf2db',     // 7 个: 柔和淡薄荷绿 (Mint Leaf)
+          '#c8e6c9',     // 8 个: 柔和淡绿 (Fresh Green)
+          '#a5d6a7'      // 9 个: 柔和满绿 (Perfect Green)
+        ];
+        
+        const color = count > 9 ? gradientColors[9] : (gradientColors[count] || 'transparent');
+        batFill.style.backgroundColor = color;
+
+        // 溢出 9 个时的紫色警告特效
+        if (count > 9) {
+          keyBtn.classList.add('over-limit');
+        } else {
+          keyBtn.classList.remove('over-limit');
+        }
+      }
+    }
   }
 
   // 渲染公屏聊天区域
