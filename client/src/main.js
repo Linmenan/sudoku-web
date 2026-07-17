@@ -868,7 +868,11 @@ function renderBoard(state) {
       const visibleNotes = state.notes[index].filter(n => !conflicts[index].has(n));
       if (visibleNotes.length > 0) {
         let gridHtml = '<div class="notes-grid">';
-        for (let n = 1; n <= 9; n++) gridHtml += `<div class="note-item">${visibleNotes.includes(n) ? n : ''}</div>`;
+        for (let n = 1; n <= 9; n++) {
+          const isHighlight = (highlightedNum !== null && n === highlightedNum);
+          const className = isHighlight ? 'note-item note-highlight' : 'note-item';
+          gridHtml += `<div class="${className}">${visibleNotes.includes(n) ? n : ''}</div>`;
+        }
         cell.innerHTML = gridHtml + '</div>';
       } else cell.innerHTML = '';
     }
