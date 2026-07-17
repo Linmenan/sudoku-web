@@ -144,10 +144,17 @@ export function generateSudoku(difficulty) {
   // 1. 生成完整合法终盘
   fillBoard(0);
 
-  // 2. 根据难度确定需要挖空的格子数量
-  let removeCount = 45; // 中等
-  if (difficulty === 'easy') removeCount = 35;
-  if (difficulty === 'hard') removeCount = 55;
+  // 2. 根据难度确定需要挖空的格子数量（从指定区间内随机抽取）
+  let removeCount;
+  if (difficulty === 'easy') {
+    removeCount = Math.floor(Math.random() * (40 - 35 + 1)) + 35; // [35, 40]
+  } else if (difficulty === 'hard') {
+    removeCount = Math.floor(Math.random() * (60 - 55 + 1)) + 55; // [55, 60]
+  } else if (difficulty === 'nightmare') {
+    removeCount = 64; // [64] 人类已知的数独极限，只留17个数字且具备唯一解
+  } else {
+    removeCount = Math.floor(Math.random() * (50 - 45 + 1)) + 45; // 默认 medium [45, 50]
+  }
 
   // 3. 随机挖空并验证唯一解
   let indices = Array.from({ length: 81 }, (_, i) => i).sort(() => Math.random() - 0.5);
