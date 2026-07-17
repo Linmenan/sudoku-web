@@ -869,7 +869,8 @@ function renderBoard(state) {
       if (visibleNotes.length > 0) {
         let gridHtml = '<div class="notes-grid">';
         for (let n = 1; n <= 9; n++) {
-          const isHighlight = (highlightedNum !== null && n === highlightedNum);
+          // 仅当玩家确实填入了该备注，且该数字等于当前全局高亮数字时，才触发备注高亮
+          const isHighlight = (highlightedNum !== null && n === highlightedNum && visibleNotes.includes(n));
           const className = isHighlight ? 'note-item note-highlight' : 'note-item';
           gridHtml += `<div class="${className}">${visibleNotes.includes(n) ? n : ''}</div>`;
         }
