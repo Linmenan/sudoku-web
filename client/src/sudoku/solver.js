@@ -9,72 +9,109 @@
 // client/src/sudoku/solver.js
 
 /**
- * 验证当前盘面是否有唯一解
+ * 验证当前盘面是否有唯一解 (极速版：位运算 + MRV启发式搜索)
  * @param {Array} boardArr 长度为 81 的一维数组 (null 表示空)
  * @returns {number} 0(无解), 1(唯一解), 2(多解)
  */
 export function countSolutions(boardArr) {
-  // return 1;
   let solutions = 0;
-  // 将一维数组转换为 9x9 二维数组，方便逻辑判断
   let board = [];
   for (let i = 0; i < 9; i++) {
     board.push(boardArr.slice(i * 9, i * 9 + 9));
   }
 
-  // 检查在 (r, c) 填入 val 是否合法 (同行列宫无重复)
-  function isValid(r, c, val) {
-    for (let i = 0; i < 9; i++) {
-      if (board[r][i] === val || board[i][c] === val) return false;
-    }
-    let startRow = Math.floor(r / 3) * 3;
-    let startCol = Math.floor(c / 3) * 3;
-    for (let i = 0; i < 3; i++) {
-      for (let j = 0; j < 3; j++) {
-        if (board[startRow + i][startCol + j] === val) return false;
-      }
-    }
-    return true;
-  }
+  // 预处理行、列、宫的二进制位图掩码 (用于极速判断合法性)
+  let rowMask = new Array(9).fill(0);
+  let colMask = new Array(9).fill(0);
+  let boxMask = new Array(9).fill(0);
+  let emptyCells = 0;
 
-  // 回溯求解核心函数
-  function solve(r, c) {
-    if (r === 9) {
-      solutions++;
-      return;
-    }
-    // 剪枝：如果已经找到 2 个解，说明不唯一，直接终止
-    if (solutions > 1) return; 
-
-    let nextR = c === 8 ? r + 1 : r;
-    let nextC = c === 8 ? 0 : c + 1;
-
-    if (board[r][c] !== null) {
-      solve(nextR, nextC);
-    } else {
-      for (let v = 1; v <= 9; v++) {
-        if (isValid(r, c, v)) {
-          board[r][c] = v;
-          solve(nextR, nextC);
-          board[r][c] = null; // 回溯恢复状态
-        }
-      }
-    }
-  }
-
-  // 首先检查当前已有数字是否冲突 (防止房主出题本身就是错的)
+  // 1. 初始化状态并检测初始盘面是否本身就冲突
   for (let r = 0; r < 9; r++) {
     for (let c = 0; c < 9; c++) {
       let val = board[r][c];
       if (val !== null) {
-        board[r][c] = null;
-        if (!isValid(r, c, val)) return 0; // 初始盘面就冲突，必然无解
-        board[r][c] = val;
+        let bit = 1 << val;
+        let boxIdx = Math.floor(r / 3) * 3 + Math.floor(c / 3);
+        
+        // 如果当前数字与同行、同列或同宫已有数字冲突
+        if ((rowMask[r] & bit) || (colMask[c] & bit) || (boxMask[boxIdx] & bit)) {
+          return 0; 
+        }
+        // 记录该数字已被使用
+        rowMask[r] |= bit;
+        colMask[c] |= bit;
+        boxMask[boxIdx] |= bit;
+      } else {
+        emptyCells++;
       }
     }
   }
 
-  solve(0, 0);
+  // 2. 核心求解：MRV 启发式搜索
+  function solve(remains) {
+    if (remains === 0) {
+      solutions++;
+      return;
+    }
+    if (solutions > 1) return; // 剪枝：超过 1 个解立刻停止
+
+    let minOptions = 10;
+    let bestR = -1, bestC = -1, bestBox = -1;
+    let bestMask = 0;
+
+    // 每次都找出当前剩余可选数字最少的格子 (Minimum Remaining Values)
+    for (let r = 0; r < 9; r++) {
+      for (let c = 0; c < 9; c++) {
+        if (board[r][c] === null) {
+          let boxIdx = Math.floor(r / 3) * 3 + Math.floor(c / 3);
+          // 计算当前格子已经被占用的数字掩码 (1表示不可用)
+          let used = rowMask[r] | colMask[c] | boxMask[boxIdx];
+          
+          // 统计这个格子还能填几个数字
+          let options = 0;
+          for (let v = 1; v <= 9; v++) {
+            if ((used & (1 << v)) === 0) options++;
+          }
+
+          if (options === 0) return; // 遇到死胡同，此路不通，立刻回溯
+
+          if (options < minOptions) {
+            minOptions = options;
+            bestR = r;
+            bestC = c;
+            bestBox = boxIdx;
+            bestMask = used;
+            // 极致剪枝：如果只有1个选择，不用再找其他格子了，直接锁定它
+            if (options === 1) break; 
+          }
+        }
+      }
+      if (minOptions === 1) break; 
+    }
+
+    // 在找到的“最紧迫”的格子上尝试填数
+    for (let v = 1; v <= 9; v++) {
+      let bit = 1 << v;
+      if ((bestMask & bit) === 0) { // 如果该数字可用
+        // 填入状态
+        board[bestR][bestC] = v;
+        rowMask[bestR] |= bit;
+        colMask[bestC] |= bit;
+        boxMask[bestBox] |= bit;
+
+        solve(remains - 1);
+
+        // 回溯恢复状态
+        board[bestR][bestC] = null;
+        rowMask[bestR] &= ~bit;
+        colMask[bestC] &= ~bit;
+        boxMask[bestBox] &= ~bit;
+      }
+    }
+  }
+
+  solve(emptyCells);
   return solutions;
 }
 
