@@ -15,6 +15,8 @@ export const createStore = (onStateChange = () => {}) => {
     chatMessages: [], // 新增：保存房间聊天记录
     checkedCells: Array(81).fill(false), // 新增：保存单元格检查标记
     branchStacks: {}, // 新增：支持多级嵌套分支的栈架构 { playerId: [layer1, layer2, ...] }
+    gameStartTime: null, // 新增：游戏开始时间戳
+    gameEndTime: null, // 新增：游戏结束时间戳
   };
 
   const getRowColGrid = (index) => {
@@ -140,6 +142,14 @@ export const createStore = (onStateChange = () => {}) => {
         case 'LOCK_PUZZLE': {
           state.board.forEach((val, i) => { if (val !== null) state.locked[i] = true; });
           state.phase = 'PLAYING';
+          state.gameStartTime = Date.now();
+          state.gameEndTime = null;
+          break;
+        }
+        case 'SET_END_TIME': {
+          if (!state.gameEndTime) {
+            state.gameEndTime = action.payload.time;
+          }
           break;
         }
         case 'CLEAR_BOARD': {

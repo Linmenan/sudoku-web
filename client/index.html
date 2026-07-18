@@ -246,7 +246,7 @@
 
     <div class="info-bar" id="inGameInfoBar">
       <div id="playerList"></div>
-      <div id="modeToggle" class="mode-toggle">📝 备注模式 (Off)</div>
+      <div id="gameTimer" style="font-weight: bold; padding: 5px 10px; background: #e0e0e0; border-radius: 4px; color: #333; font-family: monospace; font-size: 16px; user-select: none;">⏱️ 00:00:00</div>
     </div>
   </div>
   
@@ -306,6 +306,7 @@
   <div id="winModal">
     <div class="win-content">
       <h2>🎉 谜题被成功解开！</h2>
+      <div id="winTimeDisplay" style="margin-bottom: 10px; font-size: 16px; color: #388e3c;"></div>
       <div id="finalBoard"></div>
       <p>本次协作贡献度 (填入正确数字数量)：</p>
       <div id="scoreBoard"></div>

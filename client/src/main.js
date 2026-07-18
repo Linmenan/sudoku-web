@@ -14,7 +14,7 @@ const setupPanel = document.getElementById('setupPanel');
 const playerListDiv = document.getElementById('playerList');
 const mainTitle = document.getElementById('mainTitle');
 const nicknameArea = document.getElementById('nicknameArea');
-const modeToggle = document.getElementById('modeToggle');
+const gameTimer = document.getElementById('gameTimer');
 const nicknameInput = document.getElementById('nicknameInput');
 const btnLeave = document.getElementById('btnLeave');
 const winModal = document.getElementById('winModal');
@@ -404,8 +404,6 @@ chatInput.addEventListener('keydown', (e) => {
 
 // 初始化画板元素与事件绑定
 function updateModeToggleUI() {
-  modeToggle.innerText = isNoteMode ? '📝 备注模式 (On)' : '📝 备注模式 (Off)';
-  if (isNoteMode) modeToggle.classList.add('active'); else modeToggle.classList.remove('active');
   if (vkModeToggle) {
     vkModeToggle.innerText = isNoteMode ? '📝 备注 (On)' : '📝 备注 (Off)';
     if (isNoteMode) vkModeToggle.classList.add('active'); else vkModeToggle.classList.remove('active');
@@ -413,12 +411,24 @@ function updateModeToggleUI() {
   // 核心修改：切换模式时，强制立即刷新整个盘面和键盘高亮状态
   renderBoard(store.getState());
 }
-modeToggle.addEventListener('click', () => { isNoteMode = !isNoteMode; updateModeToggleUI(); });
 if (vkModeToggle) {
   vkModeToggle.addEventListener('click', (e) => {
     e.preventDefault(); e.stopPropagation(); isNoteMode = !isNoteMode; updateModeToggleUI();
   });
 }
+
+// 游戏计时器更新逻辑
+setInterval(() => {
+  const state = store.getState();
+  if (state.phase === 'PLAYING' && state.gameStartTime) {
+    const now = state.gameEndTime || Date.now();
+    const diff = Math.floor((now - state.gameStartTime) / 1000);
+    const h = String(Math.floor(diff / 3600)).padStart(2, '0');
+    const m = String(Math.floor((diff % 3600) / 60)).padStart(2, '0');
+    const s = String(diff % 60).padStart(2, '0');
+    if (gameTimer) gameTimer.innerText = `⏱️ ${h}:${m}:${s}`;
+  }
+}, 1000);
 
 // 体验优化：智能防遮挡平滑滚动逻辑
 function ensureCellVisible(index) {
@@ -538,6 +548,17 @@ function triggerWinSequence(state) {
     scoreBoard.innerHTML += `<div class="score-item" style="color: ${p.color}"><span>${p.name}</span><span>${scores[id]} 格</span></div>`;
   });
 
+// 渲染结算用时
+  const winTimeDisplay = document.getElementById('winTimeDisplay');
+  if (winTimeDisplay && state.gameStartTime) {
+    const now = state.gameEndTime || Date.now();
+    const diff = Math.floor((now - state.gameStartTime) / 1000);
+    const h = String(Math.floor(diff / 3600)).padStart(2, '0');
+    const m = String(Math.floor((diff % 3600) / 60)).padStart(2, '0');
+    const s = String(diff % 60).padStart(2, '0');
+    winTimeDisplay.innerHTML = `<strong>游戏用时：</strong> ${h}:${m}:${s}`;
+  }
+
   // 动态生成通关最终盘面
   const finalBoardDiv = document.getElementById('finalBoard');
   if (finalBoardDiv) {
@@ -569,7 +590,7 @@ function triggerWinSequence(state) {
 
 document.addEventListener('click', (e) => {
   if (!document.contains(e.target)) return;
-  if (!e.target.closest('.cell') && !e.target.closest('#virtualKeyboard') && !e.target.closest('.mode-toggle')) {
+  if (!e.target.closest('.cell') && !e.target.closest('#virtualKeyboard')) {
     executeAction({ type: 'UPDATE_FOCUS', payload: { index: null } });
   }
 });
@@ -979,6 +1000,9 @@ function renderBoard(state) {
   // 核心修复：将通关判定下沉至全局渲染流中。
   // 这样不仅解决了其他玩家收不到弹窗的 Bug，同时也顺带修复了通过“分支合并”填满盘面时不触发通关的 Bug。
   if (state.phase === 'PLAYING' && isBoardSolved(state.board)) {
+    if (!state.gameEndTime) {
+      executeAction({ type: 'SET_END_TIME', payload: { time: Date.now() } });
+    }
     // 增加防御性判断，防止 Reactivity 导致弹窗重复触发闪烁
     if (winModal.style.display !== 'flex') {
       triggerWinSequence(state);
@@ -988,6 +1012,18 @@ function renderBoard(state) {
   // 触发 UI 渲染时一并更新多级分支面板信息
   updateBranchUI(state);
 }
+
+// 监听切屏后台返回，确保结算画面能够弹出同步
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') {
+    const state = store.getState();
+    if (state.phase === 'PLAYING' && isBoardSolved(state.board)) {
+      if (winModal.style.display !== 'flex') {
+        triggerWinSequence(state);
+      }
+    }
+  }
+});
 
 // 渲染类似于 GitGraph 的全局拓扑时间轴
 function renderGitGraph(state) {
