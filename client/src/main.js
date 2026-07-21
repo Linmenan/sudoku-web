@@ -489,26 +489,53 @@ let devSecretBuffer = '';
 let devLastInputTime = 0;
 
 function handleInput(key) {
-  // 开发者后台监控：连续快速输入 314378 (相邻等待小于 200ms)
+  const state = store.getState();
+  const focusedIndex = state.focuses[localPlayerId];
+  const hasFocus = focusedIndex !== undefined && focusedIndex !== null;
+  // 核心防御：判断当前是否聚焦在了已经填入数字（或初始锁定）的格子上
+  const isCellFilled = hasFocus && state.board[focusedIndex] !== null;
+
+  // 开发者后台监控：连续快速输入 314378 (相邻等待小于 500ms)
   const numKey = parseInt(key);
   if (!isNaN(numKey) && numKey >= 1 && numKey <= 9) {
     const now = Date.now();
-    if (now - devLastInputTime > 200) {
-      devSecretBuffer = ''; // 超时重置
-    }
-    devSecretBuffer += key;
-    devLastInputTime = now;
+    const timeDiff = now - devLastInputTime;
     
-    if (devSecretBuffer === '314378') {
-      devSecretBuffer = '';
-      executeAction({ type: 'DEV_AUTO_NOTES' }); // 触发一键备注填充
-      return;
+    if (timeDiff > 500) {
+      if (devSecretBuffer.length > 0) {
+        console.log(`[Dev-Backdoor] ⏱️ 输入间隔 ${timeDiff}ms，超时重置缓冲`);
+      }
+      devSecretBuffer = ''; 
+    }
+
+    // 触发条件：仅在 PLAYING 阶段，且聚焦的单元格已有数字时，才处理密令
+    if (state.phase === 'PLAYING' && isCellFilled) {
+      devSecretBuffer += key;
+      devLastInputTime = now;
+      console.log(`[Dev-Backdoor] ⌨️ 按键: ${key} | 当前缓冲: ${devSecretBuffer} | 耗时: ${timeDiff}ms`);
+      
+      if (devSecretBuffer === '314378') {
+        console.log(`[Dev-Backdoor] 🚀 密令匹配成功！下发全局备注填充事件`);
+        devSecretBuffer = '';
+        executeAction({ type: 'DEV_AUTO_NOTES' });
+        return;
+      }
+
+      // 如果当前输入是密令的有效前缀，直接阻断常规输入，防止误填或闪烁
+      if ('314378'.startsWith(devSecretBuffer)) {
+        return;
+      }
+    } else {
+      // 只要条件不符合，立即清空缓冲
+      if (devSecretBuffer.length > 0) {
+        console.log(`[Dev-Backdoor] ⚠️ 触发中断：必须在游戏阶段且聚焦非空格 (阶段=${state.phase}, 已填数字=${isCellFilled})`);
+        devSecretBuffer = '';
+      }
     }
   }
 
-  const state = store.getState();
-  const focusedIndex = state.focuses[localPlayerId];
-  if (focusedIndex === undefined || focusedIndex === null) return;
+  // 常规输入阻断逻辑
+  if (!hasFocus) return;
 
   const num = parseInt(key);
   const isValidNum = num >= 1 && num <= 9;
