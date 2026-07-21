@@ -17,6 +17,7 @@ export const createStore = (onStateChange = () => {}) => {
     branchStacks: {}, // 新增：支持多级嵌套分支的栈架构 { playerId: [layer1, layer2, ...] }
     gameStartTime: null, // 新增：游戏开始时间戳
     gameEndTime: null, // 新增：游戏结束时间戳
+    difficulty: null, // 新增：记录当前游戏难度
   };
 
   const getRowColGrid = (index) => {
@@ -158,17 +159,52 @@ export const createStore = (onStateChange = () => {}) => {
             state.notes.forEach(note => note.length = 0);
             state.checkedCells.fill(false);
             state.branchStacks = {};
+            state.difficulty = null;
           }
           break;
         }
         case 'SET_BOARD': {
           // 用于批量将算法生成的题目载入状态
           if (state.phase === 'SETUP') {
-            const { newBoard } = action.payload;
+            const { newBoard, difficulty } = action.payload;
             state.board = [...newBoard];
             state.notes.forEach(note => note.length = 0);
             state.checkedCells.fill(false);
             state.branchStacks = {};
+            state.difficulty = difficulty || null;
+          }
+          break;
+        }
+        case 'DEV_AUTO_NOTES': {
+          // 开发者后门：一键为全盘空单元格填充有效候选备注
+          if (state.phase === 'PLAYING') {
+            const conflicts = Array(81).fill().map(() => new Set());
+            // 第一步：构建全盘占用冲突集
+            for (let i = 0; i < 81; i++) {
+              if (state.board[i] !== null) {
+                const row = Math.floor(i / 9);
+                const col = i % 9;
+                const grid = Math.floor(row / 3) * 3 + Math.floor(col / 3);
+                for (let j = 0; j < 81; j++) {
+                  const cr = Math.floor(j / 9);
+                  const cc = j % 9;
+                  const cg = Math.floor(cr / 3) * 3 + Math.floor(cc / 3);
+                  if (cr === row || cc === col || cg === grid) {
+                    conflicts[j].add(state.board[i]);
+                  }
+                }
+              }
+            }
+            // 第二步：将不发生冲突的候选数字强制写入所有空单元格备注区
+            for (let i = 0; i < 81; i++) {
+              if (state.board[i] === null) {
+                const validNotes = [];
+                for (let n = 1; n <= 9; n++) {
+                  if (!conflicts[i].has(n)) validNotes.push(n);
+                }
+                state.notes[i] = validNotes;
+              }
+            }
           }
           break;
         }
