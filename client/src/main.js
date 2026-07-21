@@ -503,7 +503,7 @@ function handleInput(key) {
     
     if (timeDiff > 500) {
       if (devSecretBuffer.length > 0) {
-        console.log(`[Dev-Backdoor] ⏱️ 输入间隔 ${timeDiff}ms，超时重置缓冲`);
+        // console.log(`[Dev-Backdoor] ⏱️ 输入间隔 ${timeDiff}ms，超时重置缓冲`);
       }
       devSecretBuffer = ''; 
     }
@@ -512,10 +512,10 @@ function handleInput(key) {
     if (state.phase === 'PLAYING' && isCellFilled) {
       devSecretBuffer += key;
       devLastInputTime = now;
-      console.log(`[Dev-Backdoor] ⌨️ 按键: ${key} | 当前缓冲: ${devSecretBuffer} | 耗时: ${timeDiff}ms`);
+      // console.log(`[Dev-Backdoor] ⌨️ 按键: ${key} | 当前缓冲: ${devSecretBuffer} | 耗时: ${timeDiff}ms`);
       
       if (devSecretBuffer === '314378') {
-        console.log(`[Dev-Backdoor] 🚀 密令匹配成功！下发全局备注填充事件`);
+        // console.log(`[Dev-Backdoor] 🚀 密令匹配成功！下发全局备注填充事件`);
         devSecretBuffer = '';
         executeAction({ type: 'DEV_AUTO_NOTES' });
         return;
@@ -528,7 +528,7 @@ function handleInput(key) {
     } else {
       // 只要条件不符合，立即清空缓冲
       if (devSecretBuffer.length > 0) {
-        console.log(`[Dev-Backdoor] ⚠️ 触发中断：必须在游戏阶段且聚焦非空格 (阶段=${state.phase}, 已填数字=${isCellFilled})`);
+        // console.log(`[Dev-Backdoor] ⚠️ 触发中断：必须在游戏阶段且聚焦非空格 (阶段=${state.phase}, 已填数字=${isCellFilled})`);
         devSecretBuffer = '';
       }
     }
